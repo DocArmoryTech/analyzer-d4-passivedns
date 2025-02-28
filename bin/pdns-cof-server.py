@@ -819,14 +819,37 @@ class FullQueryHandler(tornado.web.RequestHandler):
             for x in getAssociatedRecords(q):
                 self.write(JsonQOF(getRecord(t=x.strip())))
 
+class SwaggerHandler(tornado.web.RequestHandler):
+    def get(self):
+        # Load the static swagger.json
+        with open("swagger.json", "r") as f:
+            swagger_spec = json.load(f)
+        
+        # Dynamically adjust the host
+        default_host = "localhost:8400"
+        host = os.getenv('SERVER_HOST', default_host)  # Use env var or fallback to default
+        
+        # Optionally adjust based on request headers (e.g., X-Forwarded-Host for proxies)
+        if 'Host' in self.request.headers:
+            host = self.request.headers['Host']
+        
+        swagger_spec['host'] = host
+        
+        # Serve the modified spec
+        self.write(swagger_spec)
 
-application = tornado.web.Application(
-    [
-        (r"/query/(.*)", QueryHandler),
-        (r"/fquery/(.*)", FullQueryHandler),
-        (r"/info", InfoHandler),
-    ]
-)
+# Get the absolute path to the directory containing this script
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SWAGGER_PATH = os.path.join(SCRIPT_DIR, "swagger.json")
+
+application = tornado.web.Application([
+    (r"/", tornado.web.RedirectHandler, {"url": "/swagger.json"}),  # Root redirects to /swagger.json
+    (r"/query/(.*)", QueryHandler),
+    (r"/fquery/(.*)", FullQueryHandler),
+    (r"/info", InfoHandler),
+    (r"/swagger.json", SwaggerHandler),
+])
+
 
 if __name__ == "test":
 
@@ -839,5 +862,9 @@ if __name__ == "test":
         else:
             print(JsonQOF(getRecord(t=q)))
 else:
+    if not os.path.exists(SWAGGER_PATH):
+        print(f"Error: swagger.json not found at {SWAGGER_PATH}. Please ensure it exists in the script's directory.")
+        exit(1)
     application.listen(8400)
+    print("Server running on http://localhost:8400")
     tornado.ioloop.IOLoop.instance().start()

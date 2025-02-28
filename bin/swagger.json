@@ -1,0 +1,200 @@
+{
+    "swagger": "2.0",
+    "info": {
+      "title": "Passive DNS Server API",
+      "version": "1.0.0",
+      "description": "A Passive DNS server compliant with Passive DNS - Common Output Format (draft-dulaunoy-dnsop-passive-dns-cof)",
+      "contact": {
+        "name": "CIRCL",
+        "url": "https://www.circl.lu",
+        "email": "info@circl.lu"
+      },
+      "license": {
+        "name": "GNU Affero General Public License v3",
+        "url": "https://www.gnu.org/licenses/agpl-3.0.html"
+      }
+    },
+    "externalDocs": [{
+      "description": "Find out more about D4-project",
+      "url": "https://d4-project.org/"
+    },
+    {
+      "description": "Find out more about analyzer-d4-passivedns",
+      "url": "https://github.com/D4-project/analyzer-d4-passivedns"
+    }
+  ],
+    "host": "localhost:8400",
+    "schemes": ["http"],
+    "basePath": "/",
+    "paths": {
+      "/query/{rrname}": {
+        "get": {
+          "summary": "Query Passive DNS records",
+          "description": "Retrieve Passive DNS records for a given resource record name or IP address.",
+          "parameters": [
+            {
+              "name": "rrname",
+              "in": "path",
+              "required": true,
+              "type": "string",
+              "description": "Resource record name (e.g., example.com) or IP address (e.g., 8.8.8.8)"
+            }
+          ],
+          "produces": ["application/json"],
+          "responses": {
+            "200": {
+              "description": "A list of Passive DNS records",
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/DNSRecord"
+                }
+              }
+            },
+            "400": {
+              "description": "Invalid rrname or IP address"
+            },
+            "500": {
+              "description": "Internal server error"
+            }
+          }
+        }
+      },
+      "/fquery/{rrname}": {
+        "get": {
+          "summary": "Full Query Passive DNS records",
+          "description": "Retrieve all associated Passive DNS records, including reverse lookups for IPs.",
+          "parameters": [
+            {
+              "name": "rrname",
+              "in": "path",
+              "required": true,
+              "type": "string",
+              "description": "Resource record name (e.g., example.com) or IP address (e.g., 8.8.8.8)"
+            }
+          ],
+          "produces": ["application/json"],
+          "responses": {
+            "200": {
+              "description": "A list of Passive DNS records",
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/DNSRecord"
+                }
+              }
+            },
+            "400": {
+              "description": "Invalid rrname or IP address"
+            },
+            "500": {
+              "description": "Internal server error"
+            }
+          }
+        }
+      },
+      "/info": {
+        "get": {
+          "summary": "Get server information",
+          "description": "Retrieve information about the Passive DNS server, including stats and sensor data.",
+          "produces": ["application/json"],
+          "responses": {
+            "200": {
+              "description": "Server information",
+              "schema": {
+                "$ref": "#/definitions/InfoResponse"
+              }
+            },
+            "500": {
+              "description": "Internal server error"
+            }
+          }
+        }
+      },
+      "/swagger.json": {
+        "get": {
+          "summary": "Get API specification",
+          "description": "Retrieve the static OpenAPI/Swagger specification for this server.",
+          "produces": ["application/json"],
+          "responses": {
+            "200": {
+              "description": "Swagger specification",
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "definitions": {
+      "DNSRecord": {
+        "type": "object",
+        "properties": {
+          "rrname": {
+            "type": "string",
+            "description": "Resource record name (e.g., example.com)"
+          },
+          "rrtype": {
+            "type": "string",
+            "description": "Resource record type (e.g., A, AAAA)"
+          },
+          "rdata": {
+            "type": "string",
+            "description": "Resource record data (e.g., IP address)"
+          },
+          "time_first": {
+            "type": "integer",
+            "description": "First time the record was observed (Unix timestamp)"
+          },
+          "time_last": {
+            "type": "integer",
+            "description": "Last time the record was observed (Unix timestamp)"
+          },
+          "count": {
+            "type": "integer",
+            "description": "Number of times the record was observed"
+          },
+          "origin": {
+            "type": "string",
+            "description": "Origin of the record (optional)"
+          }
+        },
+        "required": ["rrname", "rrtype", "rdata", "time_first", "time_last", "count"]
+      },
+      "InfoResponse": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "description": "Server version"
+          },
+          "software": {
+            "type": "string",
+            "description": "Software name"
+          },
+          "stats": {
+            "type": "integer",
+            "description": "Number of processed records"
+          },
+          "sensors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sensor_id": {
+                  "type": "string",
+                  "description": "Sensor identifier"
+                },
+                "count": {
+                  "type": "integer",
+                  "description": "Sensor record count"
+                }
+              }
+            }
+          }
+        },
+        "required": ["version", "software", "stats", "sensors"]
+      }
+    }
+  }
