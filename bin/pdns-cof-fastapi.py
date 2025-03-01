@@ -17,6 +17,7 @@
 
 from fastapi import FastAPI, HTTPException, Query, Response, Depends
 from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import List, Optional, AsyncGenerator, Literal
 
@@ -25,10 +26,17 @@ import uvicorn
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+
+from loguru import logger
+
 import iptools
 import redis.asyncio as redis
 import json
 import os
+
+from datetime import datetime
 
 rrset = [
     {
@@ -682,11 +690,50 @@ app = FastAPI(
     license_info={"name": "GNU Affero General Public License v3", "url": "https://www.gnu.org/licenses/agpl-3.0.html"}
 )
 
+# Structured logging setup
+logger.configure(handlers=[{"sink": "pdns.log", "format": "{time} - {level} - {message}", "serialize": True}])
+
 # Rate limiter setup
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(429, _rate_limit_exceeded_handler)
 
+# Authentication setup
+TOKEN_FILE = os.getenv("AUTH_TOKEN_FILE", os.path.join(os.path.dirname(__file__), ".tokens.json"))
+VALID_TOKENS = []
+
+def load_tokens():
+    global VALID_TOKENS
+    try:
+        with open(TOKEN_FILE, "r") as f:
+            data = json.load(f)
+        now = datetime.utcnow().isoformat() + "Z"
+        VALID_TOKENS = [t["value"] for t in data["tokens"] if "expires" not in t or t["expires"] > now]
+        logger.info(f"Loaded {len(VALID_TOKENS)} valid tokens from {TOKEN_FILE}")
+    except Exception as e:
+        raise RuntimeError(f"Failed to load token file {TOKEN_FILE}: {str(e)}")
+
+if os.getenv("REQUIRE_AUTH", "false").lower() == "true":
+    if not os.path.exists(TOKEN_FILE):
+        raise RuntimeError(f"Authentication required but token file {TOKEN_FILE} not found")
+    load_tokens()
+
+class TokenFileHandler(FileSystemEventHandler):
+    def on_modified(self, event):
+        if event.src_path == TOKEN_FILE:
+            load_tokens()
+
+observer = Observer()
+observer.schedule(TokenFileHandler(), os.path.dirname(TOKEN_FILE), recursive=False)
+observer.start()
+
+security = HTTPBearer()
+async def optional_auth(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    if os.getenv("REQUIRE_AUTH", "false").lower() != "true":
+        return
+    if credentials.credentials not in VALID_TOKENS:
+        raise HTTPException(401, detail="Invalid or missing bearer token", headers={"WWW-Authenticate": "Bearer"})
+    logger.info(f"Authenticated request with token ending {credentials.credentials[-4:]}")
 
 analyzer_redis_host = os.getenv('D4_ANALYZER_REDIS_HOST', '127.0.0.1')
 analyzer_redis_port = int(os.getenv('D4_ANALYZER_REDIS_PORT', 6400))
@@ -702,8 +749,8 @@ class DNSRecord(BaseModel):
     rrname: str
     rrtype: str
     rdata: str
-    time_first: int | str  # Union for int or ISO string
-    time_last: int | str   # Union for int or ISO string
+    time_first: int | str
+    time_last: int | str
     count: int
     origin: Optional[str] = None
 
@@ -764,7 +811,6 @@ async def get_redis():
 
 # Helper functions
 async def get_timestamps_and_count(redis_client: redis.Redis, t1: str, t2: str, rr_values: List[str]) -> tuple[Optional[int], Optional[int], Optional[int]]:
-    """Batch fetch time_first, time_last, and count for a given rrname and rdata."""
     if not t1 or not t2:
         return None, None, None
     
@@ -882,7 +928,6 @@ async def stream_records(redis_client: redis.Redis, t: str, chunk_size: int) -> 
                         yield f"{json.dumps(record)}\n"
 
 def format_record(record: dict, time_format: str) -> dict:
-    """Format timestamps based on time_format parameter."""
     if time_format == "iso":
         return {
             **record,
@@ -894,11 +939,13 @@ def format_record(record: dict, time_format: str) -> dict:
 # API Endpoints
 @app.get("/info", response_model=InfoResponse)
 @limiter.limit("100/minute")
-async def get_info(redis_client: redis.Redis = Depends(get_redis)):
+async def get_info(redis_client: redis.Redis = Depends(get_redis), auth: None = Depends(optional_auth)):
     stats = int(await redis_client.get("stats:processed") or 0)
     sensors = await redis_client.zrevrange('stats:sensors', 0, -1, withscores=True)
     rsensors = [{"sensor_id": x[0].decode(), "count": int(float(x[1]))} for x in sensors]
-    return {"version": "git", "software": "analyzer-d4-passivedns", "stats": stats, "sensors": rsensors}
+    response = {"version": "git", "software": "analyzer-d4-passivedns", "stats": stats, "sensors": rsensors}
+    logger.info({"endpoint": "/info", "client_ip": get_remote_address(), "status": 200})
+    return response
 
 @app.get("/query/{q}")
 @limiter.limit("50/minute")
@@ -909,24 +956,25 @@ async def query(
     rrtype: Optional[str] = Query(default=None, description="Filter by RR type (e.g., A, AAAA)"),
     metadata: bool = Query(default=False, description="Wrap results in metadata object"),
     time_format: Literal["unix", "iso"] = Query(default="unix", description="Timestamp format: unix (int) or iso (string)"),
-    redis_client: redis.Redis = Depends(get_redis)
+    redis_client: redis.Redis = Depends(get_redis),
+    auth: None = Depends(optional_auth)
 ):
     records, next_cursor, total = await get_record(redis_client, q.strip(), cursor, limit, rrtype)
     
     headers = {"X-Total-Count": str(total)}
     if total > limit:
         if cursor is None:
-            records = records[:limit]  # Soft landing: first page
+            records = records[:limit]
             headers["X-Next-Cursor"] = str(limit)
             headers["X-Pagination-Required"] = "true"
+            logger.warning({"endpoint": "/query", "query": q, "client_ip": get_remote_address(), "total": total, "limit": limit, "message": "Partial results returned; use cursor for full set"})
         elif next_cursor:
             headers["X-Next-Cursor"] = next_cursor
     
     formatted_records = [format_record(r, time_format) for r in records]
-    if metadata:
-        response = {"data": formatted_records, "total": total, "next_cursor": next_cursor}
-        return Response(content=json.dumps(response), media_type="application/json", headers=headers)
-    return Response(content=json.dumps(formatted_records), media_type="application/json", headers=headers)
+    response = formatted_records if not metadata else {"data": formatted_records, "total": total, "next_cursor": next_cursor}
+    logger.info({"endpoint": "/query", "query": q, "client_ip": get_remote_address(), "status": 200, "record_count": len(records)})
+    return Response(content=json.dumps(response), media_type="application/json", headers=headers)
 
 @app.get("/fquery/{q}")
 @limiter.limit("50/minute")
@@ -937,7 +985,8 @@ async def full_query(
     rrtype: Optional[str] = Query(default=None, description="Filter by RR type (e.g., A, AAAA)"),
     metadata: bool = Query(default=False, description="Wrap results in metadata object"),
     time_format: Literal["unix", "iso"] = Query(default="unix", description="Timestamp format: unix (int) or iso (string)"),
-    redis_client: redis.Redis = Depends(get_redis)
+    redis_client: redis.Redis = Depends(get_redis),
+    auth: None = Depends(optional_auth)
 ):
     result = []
     total = 0
@@ -965,17 +1014,17 @@ async def full_query(
     headers = {"X-Total-Count": str(total)}
     if total > limit:
         if cursor is None:
-            result = result[:limit]  # Soft landing: first page
+            result = result[:limit]
             headers["X-Next-Cursor"] = str(limit)
             headers["X-Pagination-Required"] = "true"
+            logger.warning({"endpoint": "/fquery", "query": q, "client_ip": get_remote_address(), "total": total, "limit": limit, "message": "Partial results returned; use cursor for full set"})
         elif next_cursor:
             headers["X-Next-Cursor"] = next_cursor
     
     formatted_records = [format_record(r, time_format) for r in result]
-    if metadata:
-        response = {"data": formatted_records, "total": total, "next_cursor": next_cursor}
-        return Response(content=json.dumps(response), media_type="application/json", headers=headers)
-    return Response(content=json.dumps(formatted_records), media_type="application/json", headers=headers)
+    response = formatted_records if not metadata else {"data": formatted_records, "total": total, "next_cursor": next_cursor}
+    logger.info({"endpoint": "/fquery", "query": q, "client_ip": get_remote_address(), "status": 200, "record_count": len(result)})
+    return Response(content=json.dumps(response), media_type="application/json", headers=headers)
 
 @app.get("/stream/{q}")
 @limiter.limit("20/minute")
@@ -984,7 +1033,8 @@ async def stream(
     chunk_size: int = Query(default=100, ge=10, le=1000, description="Number of records per chunk"),
     rrtype: Optional[str] = Query(default=None, description="Filter by RR type (e.g., A, AAAA)"),
     time_format: Literal["unix", "iso"] = Query(default="unix", description="Timestamp format: unix (int) or iso (string)"),
-    redis_client: redis.Redis = Depends(get_redis)
+    redis_client: redis.Redis = Depends(get_redis),
+    auth: None = Depends(optional_auth)
 ):
     async def event_stream():
         try:
@@ -1007,8 +1057,10 @@ async def stream(
                 if not found:
                     yield "[]\n"
         except redis.RedisError as e:
+            logger.error({"endpoint": "/stream", "query": q, "client_ip": get_remote_address(), "error": str(e)})
             yield f"{json.dumps({'error': f'Redis error: {str(e)}'})}\n"
     
+    logger.info({"endpoint": "/stream", "query": q, "client_ip": get_remote_address(), "status": 200})
     return StreamingResponse(event_stream(), media_type="application/x-ndjson")
 
 if __name__ == "__main__":
