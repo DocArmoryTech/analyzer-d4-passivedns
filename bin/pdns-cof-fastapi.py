@@ -14,13 +14,19 @@
 # Copyright (c) 2013-2022 Alexandre Dulaunoy - a@foo.be
 # Copyright (c) 2019-2022 Computer Incident Response Center Luxembourg (CIRCL)
 
-from fastapi import FastAPI, HTTPException
+
+from fastapi import FastAPI, HTTPException, Query, Response, Depends
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, AsyncGenerator, Literal
+
 import uvicorn
-    
+
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+
 import iptools
-import redis
+import redis.asyncio as redis
 import json
 import os
 
@@ -667,35 +673,52 @@ rrset = [
     },
 ]
 
+
 app = FastAPI(
     title="Passive DNS Server API",
-    description="A Passive DNS server compliant with Passive DNS - Common Output Format (draft-dulaunoy-dnsop-passive-dns-cof)",
+    description="A Passive DNS server compliant with Passive DNS - Common Output Format (draft-dulaunoy-dnsop-passive-dns-cof). Use `cursor` and `limit` for results > 200.",
     version="1.0.0",
     contact={"name": "CIRCL", "url": "https://www.circl.lu", "email": "info@circl.lu"},
     license_info={"name": "GNU Affero General Public License v3", "url": "https://www.gnu.org/licenses/agpl-3.0.html"}
 )
 
+# Rate limiter setup
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(429, _rate_limit_exceeded_handler)
+
+
 analyzer_redis_host = os.getenv('D4_ANALYZER_REDIS_HOST', '127.0.0.1')
 analyzer_redis_port = int(os.getenv('D4_ANALYZER_REDIS_PORT', 6400))
 
-r = redis.StrictRedis(host=analyzer_redis_host, port=analyzer_redis_port, db=0)
+# Redis async connection pool
+redis_pool = redis.ConnectionPool.from_url(f"redis://{analyzer_redis_host}:{analyzer_redis_port}/0")
 
 rrset_supported = ['1', '2', '5', '15', '16', '28', '33', '46']
-expiring_type = ['16']
-
-
 origin = "origin not configured"
 
-
-# Pydantic models for request/response
+# Pydantic models with examples
 class DNSRecord(BaseModel):
     rrname: str
     rrtype: str
     rdata: str
-    time_first: int
-    time_last: int
+    time_first: int | str  # Union for int or ISO string
+    time_last: int | str   # Union for int or ISO string
     count: int
     origin: Optional[str] = None
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "rrname": "example.com",
+                "rrtype": "A",
+                "rdata": "93.184.216.34",
+                "time_first": 1234567890,
+                "time_last": 1234567899,
+                "count": 100,
+                "origin": "origin.example"
+            }
+        }
 
 class Sensor(BaseModel):
     sensor_id: str
@@ -707,127 +730,129 @@ class InfoResponse(BaseModel):
     stats: int
     sensors: List[Sensor]
 
+    class Config:
+        schema_extra = {
+            "example": {
+                "version": "git",
+                "software": "analyzer-d4-passivedns",
+                "stats": 5000,
+                "sensors": [{"sensor_id": "sensor1", "count": 3000}]
+            }
+        }
 
-def get_first_seen(t1: str = None, t2: str = None) -> Optional[int]:
-    if t1 is None or t2 is None:
-        return None
-    rec = f's:{t1.lower()}:{t2.lower()}'
-    for rr in rrset:
-        if (rr['Value']) is not None and rr['Value'] in rrset_supported:
-            qrec = f'{rec}:{rr["Value"]}'
-            recget = r.get(qrec)
-            if recget is not None:
-                return int(recget.decode(encoding='UTF-8'))
-    return None
+class MetadataResponse(BaseModel):
+    data: List[DNSRecord]
+    total: int
+    next_cursor: Optional[str] = None
 
-def get_last_seen(t1: str = None, t2: str = None) -> Optional[int]:
-    if t1 is None or t2 is None:
-        return None
-    rec = f'l:{t1.lower()}:{t2.lower()}'
-    for rr in rrset:
-        if (rr['Value']) is not None and rr['Value'] in rrset_supported:
-            qrec = f'{rec}:{rr["Value"]}'
-            recget = r.get(qrec)
-            if recget:
-                return int(recget.decode(encoding='UTF-8'))
-    return None
+    class Config:
+        schema_extra = {
+            "example": {
+                "data": [{"rrname": "large.com", "rrtype": "A", "rdata": "1.2.3.4", "time_first": 1234567890, "time_last": 1234567899, "count": 100}],
+                "total": 300,
+                "next_cursor": "100"
+            }
+        }
 
-def get_count(t1: str = None, t2: str = None) -> Optional[int]:
+# Dependency for Redis client
+async def get_redis():
+    client = redis.Redis.from_pool(redis_pool)
+    try:
+        yield client
+    finally:
+        await client.close()
+
+# Helper functions
+async def get_timestamps_and_count(redis_client: redis.Redis, t1: str, t2: str, rr_values: List[str]) -> tuple[Optional[int], Optional[int], Optional[int]]:
+    """Batch fetch time_first, time_last, and count for a given rrname and rdata."""
     if not t1 or not t2:
-        return None
-    rec = f'o:{t1.lower()}:{t2.lower()}'
-    for rr in rrset:
-        if (rr['Value']) is not None and rr['Value'] in rrset_supported:
-            qrec = f'{rec}:{rr["Value"]}'
-            recget = r.get(qrec)
-            if recget is not None:
-                return int(recget.decode(encoding='UTF-8'))
-    return None
+        return None, None, None
+    
+    keys = [f's:{t1.lower()}:{t2.lower()}:{v}' for v in rr_values] + \
+           [f'l:{t1.lower()}:{t2.lower()}:{v}' for v in rr_values] + \
+           [f'o:{t1.lower()}:{t2.lower()}:{v}' for v in rr_values]
+    
+    results = await redis_client.mget(keys)
+    time_first = next((int(r.decode()) for r in results[:len(rr_values)] if r), None)
+    time_last = next((int(r.decode()) for r in results[len(rr_values):2*len(rr_values)] if r), None)
+    count = next((int(r.decode()) for r in results[2*len(rr_values):] if r), None)
+    
+    return time_first, time_last, count
 
-def get_record(t: str = None, cursor: Optional[str] = None, count: Optional[int] = None) -> tuple[List[dict], Optional[str]]:
-    """
-    Retrieve DNS records with optional pagination.
-    - If cursor and count are None, fetch all records (original behavior).
-    - Otherwise, use SSCAN for large sets and return a page.
-    Returns: (records, next_cursor)
-    """
-    if t is None:
-        return False
+async def get_record(redis_client: redis.Redis, t: str, cursor: Optional[str] = None, limit: int = 200, rrtype: Optional[str] = None) -> tuple[List[dict], Optional[str], int]:
+    if not t:
+        return [], None, 0
+    
     rrfound = []
     next_cursor = None
+    total_count = 0
+    rr_values = [rr['Value'] for rr in rrset if rr['Value'] in rrset_supported and (rrtype is None or rr['Type'] == rrtype.upper())]
     
-    for rr in rrset:
-        if rr['Value'] in rrset_supported:
-            rec = f'r:{t}:{rr["Value"]}'
-            setsize = r.scard(rec)
-            
-            if cursor is None and count is None:
-                # No pagination: fetch all records
-                rs = r.smembers(rec)
+    for value in rr_values:
+        rec = f'r:{t}:{value}'
+        setsize = await redis_client.scard(rec)
+        total_count += setsize
+        
+        if cursor is None:
+            rs = await redis_client.smembers(rec)
+        else:
+            effective_cursor = cursor if cursor else "0"
+            if setsize < 200:
+                rs = await redis_client.smembers(rec)
             else:
-                # Pagination: use SSCAN if large, SMEMBERS if small
-                effective_cursor = cursor if cursor is not None else "0"
-                effective_count = count if count is not None else 200  # Default to 200
-                if setsize < 200:
-                    rs = r.smembers(rec)
-                else:
-                    scan_result = r.sscan(rec, cursor=effective_cursor, count=effective_count)
-                    rs, next_cursor = scan_result[1], str(scan_result[0]) if scan_result[0] != 0 else None
-            
-            if rs:
-                for v in rs:
-                    rdata = v.decode('utf-8').strip()
-                    time_first = get_first_seen(t1=t, t2=rdata)
-                    if time_first is None:
-                        continue
-                    rrval = {
-                        "time_first": time_first,
-                        "time_last": get_last_seen(t1=t, t2=rdata),
-                        "count": get_count(t1=t, t2=rdata),
-                        "rrtype": rr['Type'],
-                        "rrname": t,
-                        "rdata": rdata,
-                        "origin": origin if origin else None
-                    }
-                    rrfound.append(rrval)
+                scan_result = await redis_client.sscan(rec, cursor=effective_cursor, count=limit)
+                rs, next_cursor = scan_result[1], str(scan_result[0]) if scan_result[0] != 0 else None
+        
+        if rs:
+            for v in rs:
+                rdata = v.decode('utf-8').strip()
+                time_first, time_last, count = await get_timestamps_and_count(redis_client, t, rdata, rr_values)
+                if time_first is None:
+                    continue
+                rrval = {
+                    "time_first": time_first,
+                    "time_last": time_last,
+                    "count": count,
+                    "rrtype": next(rr['Type'] for rr in rrset if rr['Value'] == value),
+                    "rrname": t,
+                    "rdata": rdata,
+                    "origin": origin if origin else None
+                }
+                rrfound.append(rrval)
     
-    return rrfound, next_cursor
-    
-def get_associated_records(rdata: str = None) -> List[str]:
-    if rdata is None:
+    return rrfound, next_cursor, total_count
+
+async def get_associated_records(redis_client: redis.Redis, rdata: str) -> List[str]:
+    if not rdata:
         return []
     rec = f'v:{rdata.lower()}'
     records = []
     for rr in rrset:
-        if (rr['Value']) is not None and rr['Value'] in rrset_supported:
+        if rr['Value'] in rrset_supported:
             qrec = f'{rec}:{rr["Value"]}'
-            if r.smembers(qrec):
-                for v in r.smembers(qrec):
-                    records.append(v.decode('utf-8'))
+            rs = await redis_client.smembers(qrec)
+            if rs:
+                records.extend(v.decode('utf-8') for v in rs)
     return records
 
-async def stream_records(t: str = None, chunk_size: int = 100) -> AsyncGenerator[str, None]:
-    """Generate DNS records as a stream using SSCAN for large sets."""
-    if t is None:
+async def stream_records(redis_client: redis.Redis, t: str, chunk_size: int) -> AsyncGenerator[str, None]:
+    if not t:
         return
-    
     for rr in rrset:
-        if (rr['Value']) is not None and rr['Value'] in rrset_supported:
+        if rr['Value'] in rrset_supported:
             rec = f'r:{t}:{rr["Value"]}'
-            setsize = r.scard(rec)
-            
+            setsize = await redis_client.scard(rec)
             if setsize < 200:
-                # Small sets: fetch all at once
-                rs = r.smembers(rec)
+                rs = await redis_client.smembers(rec)
                 for v in rs:
-                    rdata = v.decode(encoding='UTF-8').strip()
-                    time_first = get_first_seen(t1=t, t2=rdata)
+                    rdata = v.decode('utf-8').strip()
+                    time_first, time_last, count = await get_timestamps_and_count(redis_client, t, rdata, [rr['Value']])
                     if time_first is None:
                         continue
                     record = {
                         "time_first": time_first,
-                        "time_last": get_last_seen(t1=t, t2=rdata),
-                        "count": get_count(t1=t, t2=rdata),
+                        "time_last": time_last,
+                        "count": count,
                         "rrtype": rr['Type'],
                         "rrname": t,
                         "rdata": rdata,
@@ -835,21 +860,20 @@ async def stream_records(t: str = None, chunk_size: int = 100) -> AsyncGenerator
                     }
                     yield f"{json.dumps(record)}\n"
             else:
-                # Large sets: use SSCAN to stream incrementally
                 cursor = "0"
                 while cursor != "0":
-                    scan_result = r.sscan(rec, cursor=cursor, count=chunk_size)
+                    scan_result = await redis_client.sscan(rec, cursor=cursor, count=chunk_size)
                     cursor = str(scan_result[0])
                     rs = scan_result[1]
                     for v in rs:
                         rdata = v.decode('utf-8').strip()
-                        time_first = get_first_seen(t1=t, t2=rdata)
+                        time_first, time_last, count = await get_timestamps_and_count(redis_client, t, rdata, [rr['Value']])
                         if time_first is None:
                             continue
                         record = {
                             "time_first": time_first,
-                            "time_last": get_last_seen(t1=t, t2=rdata),
-                            "count": get_count(t1=t, t2=rdata),
+                            "time_last": time_last,
+                            "count": count,
                             "rrtype": rr['Type'],
                             "rrname": t,
                             "rdata": rdata,
@@ -857,118 +881,135 @@ async def stream_records(t: str = None, chunk_size: int = 100) -> AsyncGenerator
                         }
                         yield f"{json.dumps(record)}\n"
 
-
-def rem_duplicate(d: List[dict] = None) -> List[dict]:
-    if d is None:
-        return []
-    outd = [dict(t) for t in set(tuple(o.items()) for o in d)]
-    return outd
-
-def json_qof(rrfound: List[dict] = None, remove_duplicate: bool = True) -> str:
-    if rrfound is None:
-        return ""
-
-    if remove_duplicate:
-        rrfound = rem_duplicate(d=rrfound)
-    
-    return "\n".join(json.dumps(rr) for rr in rrfound)
+def format_record(record: dict, time_format: str) -> dict:
+    """Format timestamps based on time_format parameter."""
+    if time_format == "iso":
+        return {
+            **record,
+            "time_first": datetime.utcfromtimestamp(record["time_first"]).isoformat() + "Z",
+            "time_last": datetime.utcfromtimestamp(record["time_last"]).isoformat() + "Z"
+        }
+    return record
 
 # API Endpoints
 @app.get("/info", response_model=InfoResponse)
-async def get_info():
-    # [Unchanged]
-    pass
+@limiter.limit("100/minute")
+async def get_info(redis_client: redis.Redis = Depends(get_redis)):
+    stats = int(await redis_client.get("stats:processed") or 0)
+    sensors = await redis_client.zrevrange('stats:sensors', 0, -1, withscores=True)
+    rsensors = [{"sensor_id": x[0].decode(), "count": int(float(x[1]))} for x in sensors]
+    return {"version": "git", "software": "analyzer-d4-passivedns", "stats": stats, "sensors": rsensors}
 
-@app.get("/query/{q}", response_model=List[DNSRecord])
+@app.get("/query/{q}")
+@limiter.limit("50/minute")
 async def query(
     q: str,
-    cursor: Optional[str] = Query(default=None, description="Cursor for pagination, omit for full result"),
-    count: Optional[int] = Query(default=None, ge=1, le=1000, description="Number of records per page, defaults to 200 if cursor provided")
+    cursor: Optional[str] = Query(default=None, description="Cursor for pagination, required if > limit"),
+    limit: int = Query(default=200, ge=10, le=1000, description="Max records per page or total without cursor"),
+    rrtype: Optional[str] = Query(default=None, description="Filter by RR type (e.g., A, AAAA)"),
+    metadata: bool = Query(default=False, description="Wrap results in metadata object"),
+    time_format: Literal["unix", "iso"] = Query(default="unix", description="Timestamp format: unix (int) or iso (string)"),
+    redis_client: redis.Redis = Depends(get_redis)
 ):
-    print(f'query: {q}, cursor: {cursor}, count: {count}')
-    result = []
-    effective_count = 200 if cursor is not None and count is None else count
-    if iptools.ipv4.validate_ip(q) or iptools.ipv6.validate_ip(q):
-        for x in get_associated_records(q):
-            records, next_cursor = get_record(x, cursor, effective_count)
-            result.extend(records)
-            if (cursor is not None or effective_count is not None) and next_cursor:
-                break
-    else:
-        records, next_cursor = get_record(t=q.strip(), cursor=cursor, count=effective_count)
-        result.extend(records)
-    if not result and (cursor is None or cursor == "0"):
-        raise HTTPException(status_code=404, detail="No records found")
-    headers = {}
-    if (cursor is not None or effective_count is not None) and next_cursor:
-        headers["X-Next-Cursor"] = next_cursor
-    return Response(content=json.dumps(result), media_type="application/json", headers=headers)
+    records, next_cursor, total = await get_record(redis_client, q.strip(), cursor, limit, rrtype)
+    
+    headers = {"X-Total-Count": str(total)}
+    if total > limit:
+        if cursor is None:
+            records = records[:limit]  # Soft landing: first page
+            headers["X-Next-Cursor"] = str(limit)
+            headers["X-Pagination-Required"] = "true"
+        elif next_cursor:
+            headers["X-Next-Cursor"] = next_cursor
+    
+    formatted_records = [format_record(r, time_format) for r in records]
+    if metadata:
+        response = {"data": formatted_records, "total": total, "next_cursor": next_cursor}
+        return Response(content=json.dumps(response), media_type="application/json", headers=headers)
+    return Response(content=json.dumps(formatted_records), media_type="application/json", headers=headers)
 
-@app.get("/fquery/{q}", response_model=List[DNSRecord])
+@app.get("/fquery/{q}")
+@limiter.limit("50/minute")
 async def full_query(
     q: str,
-    cursor: Optional[str] = Query(default=None, description="Cursor for pagination, omit for full result"),
-    count: Optional[int] = Query(default=None, ge=1, le=1000, description="Number of records per page, defaults to 200 if cursor provided")
+    cursor: Optional[str] = Query(default=None, description="Cursor for pagination, required if > limit"),
+    limit: int = Query(default=200, ge=10, le=1000, description="Max records per page or total without cursor"),
+    rrtype: Optional[str] = Query(default=None, description="Filter by RR type (e.g., A, AAAA)"),
+    metadata: bool = Query(default=False, description="Wrap results in metadata object"),
+    time_format: Literal["unix", "iso"] = Query(default="unix", description="Timestamp format: unix (int) or iso (string)"),
+    redis_client: redis.Redis = Depends(get_redis)
 ):
-    print(f'fquery: {q}, cursor: {cursor}, count: {count}')
     result = []
-    effective_count = 200 if cursor is not None and count is None else count
+    total = 0
+    next_cursor = None
+    
     if iptools.ipv4.validate_ip(q) or iptools.ipv6.validate_ip(q):
-        for x in get_associated_records(q):
-            records, next_cursor = get_record(x, cursor, effective_count)
+        associated = await get_associated_records(redis_client, q)
+        for x in associated:
+            records, nc, tc = await get_record(redis_client, x, cursor, limit, rrtype)
             result.extend(records)
-            if (cursor is not None or effective_count is not None) and next_cursor:
+            total += tc
+            if (cursor is not None or total > limit) and nc:
+                next_cursor = nc
                 break
     else:
-        for x in get_associated_records(q):
-            records, next_cursor = get_record(t=x.strip(), cursor=cursor, count=effective_count)
+        associated = await get_associated_records(redis_client, q)
+        for x in associated:
+            records, nc, tc = await get_record(redis_client, x.strip(), cursor, limit, rrtype)
             result.extend(records)
-            if (cursor is not None or effective_count is not None) and next_cursor:
+            total += tc
+            if (cursor is not None or total > limit) and nc:
+                next_cursor = nc
                 break
-    if not result and (cursor is None or cursor == "0"):
-        raise HTTPException(status_code=404, detail="No records found")
-    headers = {}
-    if (cursor is not None or effective_count is not None) and next_cursor:
-        headers["X-Next-Cursor"] = next_cursor
-    return Response(content=json.dumps(result), media_type="application/json", headers=headers)
+    
+    headers = {"X-Total-Count": str(total)}
+    if total > limit:
+        if cursor is None:
+            result = result[:limit]  # Soft landing: first page
+            headers["X-Next-Cursor"] = str(limit)
+            headers["X-Pagination-Required"] = "true"
+        elif next_cursor:
+            headers["X-Next-Cursor"] = next_cursor
+    
+    formatted_records = [format_record(r, time_format) for r in result]
+    if metadata:
+        response = {"data": formatted_records, "total": total, "next_cursor": next_cursor}
+        return Response(content=json.dumps(response), media_type="application/json", headers=headers)
+    return Response(content=json.dumps(formatted_records), media_type="application/json", headers=headers)
 
 @app.get("/stream/{q}")
+@limiter.limit("20/minute")
 async def stream(
     q: str,
-    chunk_size: int = Query(default=100, ge=1, le=1000, description="Number of records per chunk")
+    chunk_size: int = Query(default=100, ge=10, le=1000, description="Number of records per chunk"),
+    rrtype: Optional[str] = Query(default=None, description="Filter by RR type (e.g., A, AAAA)"),
+    time_format: Literal["unix", "iso"] = Query(default="unix", description="Timestamp format: unix (int) or iso (string)"),
+    redis_client: redis.Redis = Depends(get_redis)
 ):
-    """Stream Passive DNS records as newline-delimited JSON (NDJSON) for a given resource record name or IP address."""
-    print(f'stream query: {q}, chunk_size: {chunk_size}')
     async def event_stream():
         try:
             if iptools.ipv4.validate_ip(q) or iptools.ipv6.validate_ip(q):
-                associated = get_associated_records(q)
+                associated = await get_associated_records(redis_client, q)
                 if not associated:
                     yield "[]\n"
                     return
                 for x in associated:
-                    async for record in stream_records(x, chunk_size):
-                        yield record
+                    async for record in stream_records(redis_client, x, chunk_size):
+                        parsed = json.loads(record.strip())
+                        yield f"{json.dumps(format_record(parsed, time_format))}\n"
             else:
                 found = False
-                async for record in stream_records(q.strip(), chunk_size):
-                    found = True
-                    yield record
+                async for record in stream_records(redis_client, q.strip(), chunk_size):
+                    parsed = json.loads(record.strip())
+                    if rrtype is None or parsed["rrtype"] == rrtype.upper():
+                        found = True
+                        yield f"{json.dumps(format_record(parsed, time_format))}\n"
                 if not found:
                     yield "[]\n"
         except redis.RedisError as e:
             yield f"{json.dumps({'error': f'Redis error: {str(e)}'})}\n"
+    
     return StreamingResponse(event_stream(), media_type="application/x-ndjson")
 
-if __name__ == "test":
-    qq = ["foo.be", "8.8.8.8"]
-    for q in qq:
-        if iptools.ipv4.validate_ip(q) or iptools.ipv6.validate_ip(q):
-            for x in get_associated_records(q):
-                records, _ = get_record(x)
-                print(json_qof(records))
-        else:
-            records, _ = get_record(t=q)
-            print(json_qof(records))
-else:
+if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8400)
