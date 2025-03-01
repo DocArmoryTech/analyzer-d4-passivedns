@@ -29,7 +29,7 @@ from slowapi.util import get_remote_address
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-from loguru import logger
+import logging
 
 import iptools
 import redis.asyncio as redis
@@ -690,8 +690,27 @@ app = FastAPI(
     license_info={"name": "GNU Affero General Public License v3", "url": "https://www.gnu.org/licenses/agpl-3.0.html"}
 )
 
-# Structured logging setup
-logger.configure(handlers=[{"sink": "pdns.log", "format": "{time} - {level} - {message}", "serialize": True}])
+# Structured logging setup with JSON output
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("pdns-cof-fastapi.log")
+    ]
+)
+logger = logging.getLogger(__name__)
+
+class JSONFormatter(logging.Formatter):
+    def format(self, record):
+        log_entry = {
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "level": record.levelname,
+            "message": record.msg if isinstance(record.msg, str) else json.dumps(record.msg)
+        }
+        return json.dumps(log_entry)
+
+for handler in logger.handlers:
+    handler.setFormatter(JSONFormatter())
 
 # Rate limiter setup
 limiter = Limiter(key_func=get_remote_address)
@@ -709,7 +728,7 @@ def load_tokens():
             data = json.load(f)
         now = datetime.utcnow().isoformat() + "Z"
         VALID_TOKENS = [t["value"] for t in data["tokens"] if "expires" not in t or t["expires"] > now]
-        logger.info(f"Loaded {len(VALID_TOKENS)} valid tokens from {TOKEN_FILE}")
+        logger.info({"event": "tokens_loaded", "file": TOKEN_FILE, "count": len(VALID_TOKENS)})
     except Exception as e:
         raise RuntimeError(f"Failed to load token file {TOKEN_FILE}: {str(e)}")
 
@@ -733,7 +752,7 @@ async def optional_auth(credentials: HTTPAuthorizationCredentials = Depends(secu
         return
     if credentials.credentials not in VALID_TOKENS:
         raise HTTPException(401, detail="Invalid or missing bearer token", headers={"WWW-Authenticate": "Bearer"})
-    logger.info(f"Authenticated request with token ending {credentials.credentials[-4:]}")
+    logger.info({"event": "authenticated", "token_ending": credentials.credentials[-4:], "client_ip": get_remote_address()})
 
 analyzer_redis_host = os.getenv('D4_ANALYZER_REDIS_HOST', '127.0.0.1')
 analyzer_redis_port = int(os.getenv('D4_ANALYZER_REDIS_PORT', 6400))
@@ -967,7 +986,7 @@ async def query(
             records = records[:limit]
             headers["X-Next-Cursor"] = str(limit)
             headers["X-Pagination-Required"] = "true"
-            logger.warning({"endpoint": "/query", "query": q, "client_ip": get_remote_address(), "total": total, "limit": limit, "message": "Partial results returned; use cursor for full set"})
+            logger.info({"endpoint": "/query", "query": q, "client_ip": get_remote_address(), "status": 200, "record_count": len(records)})
         elif next_cursor:
             headers["X-Next-Cursor"] = next_cursor
     
