@@ -14,6 +14,7 @@
 # Copyright (c) 2013-2022 Alexandre Dulaunoy - a@foo.be
 # Copyright (c) 2019-2022 Computer Incident Response Center Luxembourg (CIRCL)
 
+from contextlib import asynccontextmanager
 import threading
 from time import sleep
 from fastapi import FastAPI, HTTPException, Query, Response, Depends, Request
@@ -674,12 +675,26 @@ rrset = [
     },
 ]
 
+# Define lifespan handler before app instantiation
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Start the token reload thread
+    thread = threading.Thread(target=token_reload_thread, daemon=True)
+    thread.start()
+    logger.info({"event": "startup", "message": "Token reload thread started"})
+    try:
+        yield  # Hand control to the app
+    finally:
+        # Shutdown: No explicit stop needed for daemon thread, but log for clarity
+        logger.info({"event": "shutdown", "message": "Application shutting down, daemon thread will terminate"})
+
 app = FastAPI(
     title="Passive DNS Server API",
     description="A Passive DNS server compliant with Passive DNS - Common Output Format (draft-dulaunoy-dnsop-passive-dns-cof). Use `cursor` and `limit` for results > 200.",
     version="1.0.0",
     contact={"name": "CIRCL", "url": "https://www.circl.lu", "email": "info@circl.lu"},
-    license_info={"name": "GNU Affero General Public License v3", "url": "https://www.gnu.org/licenses/agpl-3.0.html"}
+    license_info={"name": "GNU Affero General Public License v3", "url": "https://www.gnu.org/licenses/agpl-3.0.html"},
+    lifespan=lifespan  # Use lifespan handler
 )
 
 # Structured logging setup with JSON output
@@ -731,12 +746,17 @@ def token_reload_thread():
         load_bearer_tokens()
         sleep(60)  # Reload every 60 seconds
 
-@app.on_event("startup")
-def startup_event():
-    """Starts the token reload thread when FastAPI starts."""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan event handler for FastAPI."""
     thread = threading.Thread(target=token_reload_thread, daemon=True)
     thread.start()
     logger.info("Started token reload thread")
+
+    yield  # FastAPI keeps running here
+
+    logger.info("Shutting down token reload thread")
+
 
 # Load tokens only if bearer mode is enabled
 if AUTH_MODE == "bearer":
