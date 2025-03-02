@@ -22,8 +22,6 @@ from typing import List, Optional, AsyncGenerator, Union, Tuple
 import uvicorn
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
 import logging
 import iptools
 import redis.asyncio as redis
@@ -715,15 +713,28 @@ VALID_TOKENS = []
 AUTH_MODE = os.getenv("AUTH_MODE", "none").lower()  # Default to "none"
 
 def load_bearer_tokens():
+    """Loads bearer tokens from the token file into memory."""
     global VALID_TOKENS
     try:
         with open(TOKEN_FILE, "r") as f:
             data = json.load(f)
-        now = datetime.utcnow().isoformat() + "Z"
-        VALID_TOKENS = [t["value"] for t in data["tokens"] if "expires" not in t or t["expires"] > now]
-        logger.info({"event": "tokens_loaded", "file": TOKEN_FILE, "count": len(VALID_TOKENS)})
+        VALID_TOKENS = [t["value"] for t in data.get("tokens", [])]
+        logger.info(f"Loaded {len(VALID_TOKENS)} tokens from {TOKEN_FILE}")
     except Exception as e:
-        raise RuntimeError(f"Failed to load token file {TOKEN_FILE}: {str(e)}")
+        logger.error(f"Failed to load token file {TOKEN_FILE}: {str(e)}")
+
+def token_reload_thread():
+    """Runs a background thread that reloads tokens every 60 seconds."""
+    while True:
+        load_bearer_tokens()
+        time.sleep(60)  # Reload every 60 seconds
+
+@app.on_event("startup")
+def startup_event():
+    """Starts the token reload thread when FastAPI starts."""
+    thread = threading.Thread(target=token_reload_thread, daemon=True)
+    thread.start()
+    logger.info("Started token reload thread")
 
 # Load tokens only if bearer mode is enabled
 if AUTH_MODE == "bearer":
@@ -737,14 +748,6 @@ elif AUTH_MODE == "openid":
 else:
     raise ValueError(f"Invalid AUTH_MODE: {AUTH_MODE}. Use 'none', 'bearer', or 'openid'")
 
-class TokenFileHandler(FileSystemEventHandler):
-    def on_modified(self, event):
-        if event.src_path == TOKEN_FILE and AUTH_MODE == "bearer":
-            load_bearer_tokens()
-
-observer = Observer()
-observer.schedule(TokenFileHandler(), os.path.dirname(TOKEN_FILE), recursive=False)
-observer.start()
 
 # Authentication dependencies
 security_bearer = HTTPBearer(auto_error=False)
