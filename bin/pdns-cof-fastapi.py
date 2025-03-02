@@ -14,29 +14,23 @@
 # Copyright (c) 2013-2022 Alexandre Dulaunoy - a@foo.be
 # Copyright (c) 2019-2022 Computer Incident Response Center Luxembourg (CIRCL)
 
-
-from fastapi import FastAPI, HTTPException, Query, Response, Depends
+from fastapi import FastAPI, HTTPException, Query, Response, Depends, Request
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
-from typing import List, Optional, AsyncGenerator, Literal, Union
-
+from typing import List, Optional, AsyncGenerator, Union
 import uvicorn
-
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
-
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-
 import logging
-
 import iptools
 import redis.asyncio as redis
 import json
 import os
-
 from datetime import datetime
+
 
 rrset = [
     {
@@ -681,7 +675,6 @@ rrset = [
     },
 ]
 
-
 app = FastAPI(
     title="Passive DNS Server API",
     description="A Passive DNS server compliant with Passive DNS - Common Output Format (draft-dulaunoy-dnsop-passive-dns-cof). Use `cursor` and `limit` for results > 200.",
@@ -752,7 +745,7 @@ async def optional_auth(credentials: HTTPAuthorizationCredentials = Depends(secu
         return
     if credentials.credentials not in VALID_TOKENS:
         raise HTTPException(401, detail="Invalid or missing bearer token", headers={"WWW-Authenticate": "Bearer"})
-    logger.info({"event": "authenticated", "token_ending": credentials.credentials[-4:], "client_ip": get_remote_address()})
+    logger.info({"event": "authenticated", "token_ending": credentials.credentials[-4:], "client_ip": get_remote_address(None)})
 
 analyzer_redis_host = os.getenv('D4_ANALYZER_REDIS_HOST', '127.0.0.1')
 analyzer_redis_port = int(os.getenv('D4_ANALYZER_REDIS_PORT', 6400))
@@ -763,13 +756,13 @@ redis_pool = redis.ConnectionPool.from_url(f"redis://{analyzer_redis_host}:{anal
 rrset_supported = ['1', '2', '5', '15', '16', '28', '33', '46']
 origin = "origin not configured"
 
-# Pydantic models with examples
+# Pydantic models with examples for Python 3.8 (Pydantic V1)
 class DNSRecord(BaseModel):
     rrname: str
     rrtype: str
     rdata: str
-    time_first: Union[int, str]
-    time_last: Union[int, str]
+    time_first: Union[int, str]  # Union for Python 3.8 compatibility
+    time_last: Union[int, str]   # Union for Python 3.8 compatibility
     count: int
     origin: Optional[str] = None
 
@@ -958,23 +951,24 @@ def format_record(record: dict, time_format: str) -> dict:
 # API Endpoints
 @app.get("/info", response_model=InfoResponse)
 @limiter.limit("100/minute")
-async def get_info(redis_client: redis.Redis = Depends(get_redis), auth: None = Depends(optional_auth)):
+async def get_info(request: Request, redis_client: redis.Redis = Depends(get_redis), auth: None = Depends(optional_auth)):
     stats = int(await redis_client.get("stats:processed") or 0)
     sensors = await redis_client.zrevrange('stats:sensors', 0, -1, withscores=True)
     rsensors = [{"sensor_id": x[0].decode(), "count": int(float(x[1]))} for x in sensors]
     response = {"version": "git", "software": "analyzer-d4-passivedns", "stats": stats, "sensors": rsensors}
-    logger.info({"endpoint": "/info", "client_ip": get_remote_address(), "status": 200})
+    logger.info({"endpoint": "/info", "client_ip": get_remote_address(request), "status": 200})
     return response
 
 @app.get("/query/{q}")
 @limiter.limit("50/minute")
 async def query(
+    request: Request,
     q: str,
     cursor: Optional[str] = Query(default=None, description="Cursor for pagination, required if > limit"),
     limit: int = Query(default=200, ge=10, le=1000, description="Max records per page or total without cursor"),
     rrtype: Optional[str] = Query(default=None, description="Filter by RR type (e.g., A, AAAA)"),
     metadata: bool = Query(default=False, description="Wrap results in metadata object"),
-    time_format: Literal["unix", "iso"] = Query(default="unix", description="Timestamp format: unix (int) or iso (string)"),
+    time_format: str = Query(default="unix", regex="^(unix|iso)$", description="Timestamp format: unix (int) or iso (string)"),
     redis_client: redis.Redis = Depends(get_redis),
     auth: None = Depends(optional_auth)
 ):
@@ -986,24 +980,25 @@ async def query(
             records = records[:limit]
             headers["X-Next-Cursor"] = str(limit)
             headers["X-Pagination-Required"] = "true"
-            logger.info({"endpoint": "/query", "query": q, "client_ip": get_remote_address(), "status": 200, "record_count": len(records)})
+            logger.warning({"endpoint": "/query", "query": q, "client_ip": get_remote_address(request), "total": total, "limit": limit, "message": "Partial results returned; use cursor for full set"})
         elif next_cursor:
             headers["X-Next-Cursor"] = next_cursor
     
     formatted_records = [format_record(r, time_format) for r in records]
     response = formatted_records if not metadata else {"data": formatted_records, "total": total, "next_cursor": next_cursor}
-    logger.info({"endpoint": "/query", "query": q, "client_ip": get_remote_address(), "status": 200, "record_count": len(records)})
+    logger.info({"endpoint": "/query", "query": q, "client_ip": get_remote_address(request), "status": 200, "record_count": len(records)})
     return Response(content=json.dumps(response), media_type="application/json", headers=headers)
 
 @app.get("/fquery/{q}")
 @limiter.limit("50/minute")
 async def full_query(
+    request: Request,
     q: str,
     cursor: Optional[str] = Query(default=None, description="Cursor for pagination, required if > limit"),
     limit: int = Query(default=200, ge=10, le=1000, description="Max records per page or total without cursor"),
     rrtype: Optional[str] = Query(default=None, description="Filter by RR type (e.g., A, AAAA)"),
     metadata: bool = Query(default=False, description="Wrap results in metadata object"),
-    time_format: Literal["unix", "iso"] = Query(default="unix", description="Timestamp format: unix (int) or iso (string)"),
+    time_format: str = Query(default="unix", regex="^(unix|iso)$", description="Timestamp format: unix (int) or iso (string)"),
     redis_client: redis.Redis = Depends(get_redis),
     auth: None = Depends(optional_auth)
 ):
@@ -1036,22 +1031,23 @@ async def full_query(
             result = result[:limit]
             headers["X-Next-Cursor"] = str(limit)
             headers["X-Pagination-Required"] = "true"
-            logger.warning({"endpoint": "/fquery", "query": q, "client_ip": get_remote_address(), "total": total, "limit": limit, "message": "Partial results returned; use cursor for full set"})
+            logger.warning({"endpoint": "/fquery", "query": q, "client_ip": get_remote_address(request), "total": total, "limit": limit, "message": "Partial results returned; use cursor for full set"})
         elif next_cursor:
             headers["X-Next-Cursor"] = next_cursor
     
     formatted_records = [format_record(r, time_format) for r in result]
     response = formatted_records if not metadata else {"data": formatted_records, "total": total, "next_cursor": next_cursor}
-    logger.info({"endpoint": "/fquery", "query": q, "client_ip": get_remote_address(), "status": 200, "record_count": len(result)})
+    logger.info({"endpoint": "/fquery", "query": q, "client_ip": get_remote_address(request), "status": 200, "record_count": len(result)})
     return Response(content=json.dumps(response), media_type="application/json", headers=headers)
 
 @app.get("/stream/{q}")
 @limiter.limit("20/minute")
 async def stream(
+    request: Request,
     q: str,
     chunk_size: int = Query(default=100, ge=10, le=1000, description="Number of records per chunk"),
     rrtype: Optional[str] = Query(default=None, description="Filter by RR type (e.g., A, AAAA)"),
-    time_format: Literal["unix", "iso"] = Query(default="unix", description="Timestamp format: unix (int) or iso (string)"),
+    time_format: str = Query(default="unix", regex="^(unix|iso)$", description="Timestamp format: unix (int) or iso (string)"),
     redis_client: redis.Redis = Depends(get_redis),
     auth: None = Depends(optional_auth)
 ):
@@ -1076,11 +1072,12 @@ async def stream(
                 if not found:
                     yield "[]\n"
         except redis.RedisError as e:
-            logger.error({"endpoint": "/stream", "query": q, "client_ip": get_remote_address(), "error": str(e)})
+            logger.error({"endpoint": "/stream", "query": q, "client_ip": get_remote_address(request), "error": str(e)})
             yield f"{json.dumps({'error': f'Redis error: {str(e)}'})}\n"
     
-    logger.info({"endpoint": "/stream", "query": q, "client_ip": get_remote_address(), "status": 200})
+    logger.info({"endpoint": "/stream", "query": q, "client_ip": get_remote_address(request), "status": 200})
     return StreamingResponse(event_stream(), media_type="application/x-ndjson")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8400)
+
