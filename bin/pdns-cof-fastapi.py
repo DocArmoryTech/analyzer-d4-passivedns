@@ -18,7 +18,7 @@ from contextlib import asynccontextmanager
 import threading
 from time import sleep
 from fastapi import FastAPI, HTTPException, Query, Response, Depends, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, RedirectResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials, OAuth2AuthorizationCodeBearer
 from pydantic import BaseModel
 from typing import List, Optional, AsyncGenerator, Union, Tuple
@@ -692,6 +692,11 @@ app = FastAPI(
     title="Passive DNS Server API",
     description="A Passive DNS server compliant with Passive DNS - Common Output Format (draft-dulaunoy-dnsop-passive-dns-cof). Use `cursor` and `limit` for results > 200.",
     version="1.0.0",
+    openapi_tags=[
+            {"name": "query", "description": "Single domain lookups"},
+            {"name": "fquery", "description": "Full associated record queries"},
+            {"name": "stream", "description": "Streaming DNS records"}
+        ]
     contact={"name": "CIRCL", "url": "https://www.circl.lu", "email": "info@circl.lu"},
     license_info={"name": "GNU Affero General Public License v3", "url": "https://www.gnu.org/licenses/agpl-3.0.html"},
     lifespan=lifespan  # Use lifespan handler
@@ -1024,6 +1029,10 @@ def format_record(record: dict, time_format: str) -> dict:
     return record
 
 # API Endpoints
+@app.get("/", include_in_schema=False)  # Hide from OpenAPI docs
+async def root():
+    return RedirectResponse(url="/docs")
+
 @app.get("/info", response_model=InfoResponse)
 @limiter.limit("100/minute")
 async def get_info(request: Request, redis_client: redis.Redis = Depends(get_redis), auth: None = Depends(optional_auth)):
