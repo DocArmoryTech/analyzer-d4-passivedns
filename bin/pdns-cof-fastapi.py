@@ -844,13 +844,32 @@ class MetadataResponse(BaseModel):
             }
         }
 
-# Dependency for Redis client
 async def get_redis():
     client = redis.Redis.from_pool(redis_pool)
     try:
+        # Ping Redis to check availability
+        await client.ping()
         yield client
+    except redis.exceptions.BusyLoadingError as e:
+        logger.warning({"event": "redis_busy_loading", "error": str(e), "message": "Redis is loading dataset, temporarily unavailable"})
+        raise HTTPException(
+            status_code=503,
+            detail="Loading dataset... Please try again shortly.",
+            headers={"Retry-After": "10"}  # Suggest retrying after 10 seconds
+        )
+    except redis.ConnectionError as e:
+        logger.error({"event": "redis_unavailable", "error": str(e), "message": "Redis service not available"})
+        raise HTTPException(
+            status_code=503,
+            detail="Redis service is temporarily unavailable. Please try again later.",
+            headers={"Retry-After": "5"}
+        )
+    except Exception as e:
+        logger.error({"event": "redis_error", "error": str(e), "message": "Unexpected error connecting to Redis"})
+        raise HTTPException(status_code=500, detail="Internal server error")
     finally:
         await client.aclose()
+
 
 # Helper functions
 async def get_timestamps_and_count(redis_client: redis.Redis, t1: str, t2: str, rr_values: List[str]) -> Tuple[Optional[int], Optional[int], Optional[int]]:
@@ -1003,6 +1022,15 @@ async def query(
     redis_client: redis.Redis = Depends(get_redis),
     auth: None = Depends(optional_auth)
 ):
+    # Validate rrtype if provided
+    if rrtype:
+        valid_rrtypes = [rr['Type'] for rr in rrset if rr['Value'] in rrset_supported]
+        if rrtype.upper() not in valid_rrtypes:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid rrtype: {rrtype}. Supported types: {', '.join(valid_rrtypes)}"
+            )
+    
     records, next_cursor, total = await get_record(redis_client, q.strip(), cursor, limit, rrtype)
     
     headers = {"X-Total-Count": str(total)}
@@ -1033,6 +1061,15 @@ async def full_query(
     redis_client: redis.Redis = Depends(get_redis),
     auth: None = Depends(optional_auth)
 ):
+    # Validate rrtype if provided
+    if rrtype:
+        valid_rrtypes = [rr['Type'] for rr in rrset if rr['Value'] in rrset_supported]
+        if rrtype.upper() not in valid_rrtypes:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid rrtype: {rrtype}. Supported types: {', '.join(valid_rrtypes)}"
+            )
+    
     result = []
     total = 0
     next_cursor = None
@@ -1082,6 +1119,15 @@ async def stream(
     redis_client: redis.Redis = Depends(get_redis),
     auth: None = Depends(optional_auth)
 ):
+    # Validate rrtype if provided
+    if rrtype:
+        valid_rrtypes = [rr['Type'] for rr in rrset if rr['Value'] in rrset_supported]
+        if rrtype.upper() not in valid_rrtypes:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid rrtype: {rrtype}. Supported types: {', '.join(valid_rrtypes)}"
+            )
+    
     async def event_stream():
         try:
             if iptools.ipv4.validate_ip(q) or iptools.ipv6.validate_ip(q):
