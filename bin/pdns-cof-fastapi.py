@@ -798,7 +798,7 @@ class DNSRecord(BaseModel):
     origin: Optional[str] = None
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "rrname": "example.com",
                 "rrtype": "A",
@@ -821,7 +821,7 @@ class InfoResponse(BaseModel):
     sensors: List[Sensor]
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "version": "git",
                 "software": "analyzer-d4-passivedns",
@@ -836,7 +836,7 @@ class MetadataResponse(BaseModel):
     next_cursor: Optional[str] = None
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "data": [{"rrname": "large.com", "rrtype": "A", "rdata": "1.2.3.4", "time_first": 1234567890, "time_last": 1234567899, "count": 100}],
                 "total": 300,
