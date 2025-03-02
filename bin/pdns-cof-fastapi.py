@@ -973,7 +973,7 @@ async def query(
     limit: int = Query(default=200, ge=10, le=1000, description="Max records per page or total without cursor"),
     rrtype: Optional[str] = Query(default=None, description="Filter by RR type (e.g., A, AAAA)"),
     metadata: bool = Query(default=False, description="Wrap results in metadata object"),
-    time_format: str = Query(default="unix", regex="^(unix|iso)$", description="Timestamp format: unix (int) or iso (string)"),
+    time_format: str = Query(default="unix", pattern="^(unix|iso)$", description="Timestamp format: unix (int) or iso (string)"),
     redis_client: redis.Redis = Depends(get_redis),
     auth: None = Depends(optional_auth)
 ):
@@ -1003,7 +1003,7 @@ async def full_query(
     limit: int = Query(default=200, ge=10, le=1000, description="Max records per page or total without cursor"),
     rrtype: Optional[str] = Query(default=None, description="Filter by RR type (e.g., A, AAAA)"),
     metadata: bool = Query(default=False, description="Wrap results in metadata object"),
-    time_format: str = Query(default="unix", regex="^(unix|iso)$", description="Timestamp format: unix (int) or iso (string)"),
+    time_format: str = Query(default="unix", pattern="^(unix|iso)$", description="Timestamp format: unix (int) or iso (string)"),
     redis_client: redis.Redis = Depends(get_redis),
     auth: None = Depends(optional_auth)
 ):
@@ -1052,7 +1052,7 @@ async def stream(
     q: str,
     chunk_size: int = Query(default=100, ge=10, le=1000, description="Number of records per chunk"),
     rrtype: Optional[str] = Query(default=None, description="Filter by RR type (e.g., A, AAAA)"),
-    time_format: str = Query(default="unix", regex="^(unix|iso)$", description="Timestamp format: unix (int) or iso (string)"),
+    time_format: str = Query(default="unix", pattern="^(unix|iso)$", description="Timestamp format: unix (int) or iso (string)"),
     redis_client: redis.Redis = Depends(get_redis),
     auth: None = Depends(optional_auth)
 ):
