@@ -1009,6 +1009,7 @@ async def get_info(request: Request, redis_client: redis.Redis = Depends(get_red
     logger.info({"endpoint": "/info", "client_ip": get_remote_address(request), "status": 200})
     return response
 
+
 @app.get("/query/{q}")
 @limiter.limit("50/minute")
 async def query(
@@ -1019,6 +1020,7 @@ async def query(
     rrtype: Optional[str] = Query(default=None, description="Filter by RR type (e.g., A, AAAA)"),
     metadata: bool = Query(default=False, description="Wrap results in metadata object"),
     time_format: str = Query(default="unix", pattern="^(unix|iso)$", description="Timestamp format: unix (int) or iso (string)"),
+    format: str = Query(default="ndjson", pattern="^(ndjson|json)$", description="Response format: ndjson (newline-separated) or json (array/object)"),
     redis_client: redis.Redis = Depends(get_redis),
     auth: None = Depends(optional_auth)
 ):
@@ -1044,9 +1046,19 @@ async def query(
             headers["X-Next-Cursor"] = next_cursor
     
     formatted_records = [format_record(r, time_format) for r in records]
-    response = formatted_records if not metadata else {"data": formatted_records, "total": total, "next_cursor": next_cursor}
+    
+    if format == "ndjson":
+        # NDJSON response (cof)
+        response_content = "\n".join(json.dumps(record) for record in formatted_records) + "\n"
+        media_type = "application/x-ndjson"
+    else:  # format == "json"
+        # True JSON response
+        response_content = json.dumps(formatted_records if not metadata else {"data": formatted_records, "total": total, "next_cursor": next_cursor})
+        media_type = "application/json"
+    
     logger.info({"endpoint": "/query", "query": q, "client_ip": get_remote_address(request), "status": 200, "record_count": len(records)})
-    return Response(content=json.dumps(response), media_type="application/json", headers=headers)
+    return Response(content=response_content, media_type=media_type, headers=headers)
+
 
 @app.get("/fquery/{q}")
 @limiter.limit("50/minute")
@@ -1058,6 +1070,7 @@ async def full_query(
     rrtype: Optional[str] = Query(default=None, description="Filter by RR type (e.g., A, AAAA)"),
     metadata: bool = Query(default=False, description="Wrap results in metadata object"),
     time_format: str = Query(default="unix", pattern="^(unix|iso)$", description="Timestamp format: unix (int) or iso (string)"),
+    format: str = Query(default="ndjson", pattern="^(ndjson|json)$", description="Response format: ndjson (cof) or json (array/object)"),
     redis_client: redis.Redis = Depends(get_redis),
     auth: None = Depends(optional_auth)
 ):
@@ -1104,9 +1117,18 @@ async def full_query(
             headers["X-Next-Cursor"] = next_cursor
     
     formatted_records = [format_record(r, time_format) for r in result]
-    response = formatted_records if not metadata else {"data": formatted_records, "total": total, "next_cursor": next_cursor}
+    
+    if format == "ndjson":
+        # NDJSON response (cof)
+        response_content = "\n".join(json.dumps(record) for record in formatted_records) + "\n"
+        media_type = "application/x-ndjson"
+    else:  # format == "json"
+        # True JSON response
+        response_content = json.dumps(formatted_records if not metadata else {"data": formatted_records, "total": total, "next_cursor": next_cursor})
+        media_type = "application/json"
+    
     logger.info({"endpoint": "/fquery", "query": q, "client_ip": get_remote_address(request), "status": 200, "record_count": len(result)})
-    return Response(content=json.dumps(response), media_type="application/json", headers=headers)
+    return Response(content=response_content, media_type=media_type, headers=headers)
 
 @app.get("/stream/{q}")
 @limiter.limit("20/minute")

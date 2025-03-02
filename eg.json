@@ -1,0 +1,8 @@
+{"rrtype": "A", "rrname": "185.194.93.14", "rdata": "circl.lu", "count": "19", "time_first": "1696798385", "time_last": "1697890824"}
+{"rrtype": "AAAA", "rrname": "2a00:5980:93::14", "rdata": "circl.lu", "count": "18", "time_first": "1696798385", "time_last": "1697890824"}
+{"rrtype": "MX", "rrname": "10 cppy.circl.lu", "rdata": "circl.lu", "count": "149", "time_first": "1696786636", "time_last": "1697897232"}
+{"rrtype": "NS", "rrname": "ns1.eurodns.com", "rdata": "circl.lu", "count": "5", "time_first": "1696798385", "time_last": "1697701116"}
+{"rrtype": "NS", "rrname": "ns2.eurodns.com", "rdata": "circl.lu", "count": "5", "time_first": "1696798385", "time_last": "1697701116"}
+{"rrtype": "NS", "rrname": "ns3.eurodns.com", "rdata": "circl.lu", "count": "5", "time_first": "1696798385", "time_last": "1697701116"}
+{"rrtype": "NS", "rrname": "ns4.eurodns.com", "rdata": "circl.lu", "count": "5", "time_first": "1696798385", "time_last": "1697701116"}
+{"rrtype": "SOA", "rrname": "ns1.eurodns.com hostmaster.eurodns.com 2023091306 43200 7200 1209600 86400", "rdata": "circl.lu", "count": "260", "time_first": "1696780845", "time_last": "1697183586"}
