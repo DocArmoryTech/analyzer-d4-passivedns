@@ -16,7 +16,7 @@
 
 from fastapi import FastAPI, HTTPException, Query, Response, Depends, Request
 from fastapi.responses import StreamingResponse
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials, OAuth2AuthorizationCodeBearer
 from pydantic import BaseModel
 from typing import List, Optional, AsyncGenerator, Union, Tuple
 import uvicorn
@@ -30,7 +30,6 @@ import redis.asyncio as redis
 import json
 import os
 from datetime import datetime
-
 
 rrset = [
     {
@@ -713,8 +712,9 @@ app.add_exception_handler(429, _rate_limit_exceeded_handler)
 # Authentication setup
 TOKEN_FILE = os.getenv("AUTH_TOKEN_FILE", os.path.join(os.path.dirname(__file__), ".tokens.json"))
 VALID_TOKENS = []
+AUTH_MODE = os.getenv("AUTH_MODE", "none").lower()  # Default to "none"
 
-def load_tokens():
+def load_bearer_tokens():
     global VALID_TOKENS
     try:
         with open(TOKEN_FILE, "r") as f:
@@ -725,32 +725,58 @@ def load_tokens():
     except Exception as e:
         raise RuntimeError(f"Failed to load token file {TOKEN_FILE}: {str(e)}")
 
-# Only load tokens if REQUIRE_AUTH is explicitly true
-if os.getenv("REQUIRE_AUTH", "false").lower() == "true":
+# Load tokens only if bearer mode is enabled
+if AUTH_MODE == "bearer":
     if not os.path.exists(TOKEN_FILE):
-        raise RuntimeError(f"Authentication required but token file {TOKEN_FILE} not found")
-    load_tokens()
+        raise RuntimeError(f"Bearer authentication requires token file {TOKEN_FILE}")
+    load_bearer_tokens()
+elif AUTH_MODE == "none":
+    logger.info({"event": "authentication_disabled", "message": "No authentication required by default"})
+elif AUTH_MODE == "openid":
+    logger.info({"event": "openid_placeholder", "message": "OpenID Connect not yet implemented"})
 else:
-    logger.info({"event": "authentication_disabled", "message": "Authentication is off by default unless REQUIRE_AUTH=true"})
+    raise ValueError(f"Invalid AUTH_MODE: {AUTH_MODE}. Use 'none', 'bearer', or 'openid'")
 
 class TokenFileHandler(FileSystemEventHandler):
     def on_modified(self, event):
-        if event.src_path == TOKEN_FILE:
-            load_tokens()
+        if event.src_path == TOKEN_FILE and AUTH_MODE == "bearer":
+            load_bearer_tokens()
 
 observer = Observer()
 observer.schedule(TokenFileHandler(), os.path.dirname(TOKEN_FILE), recursive=False)
 observer.start()
 
-security = HTTPBearer()
-async def optional_auth(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    if os.getenv("REQUIRE_AUTH", "false").lower() != "true":
-        logger.debug({"event": "auth_check_skipped", "reason": "Authentication disabled by default"})
-        return
-    if credentials.credentials not in VALID_TOKENS:
-        raise HTTPException(401, detail="Invalid or missing bearer token", headers={"WWW-Authenticate": "Bearer"})
-    logger.info({"event": "authenticated", "token_ending": credentials.credentials[-4:], "client_ip": get_remote_address(None)})
+# Authentication dependencies
+security_bearer = HTTPBearer(auto_error=False)
+security_openid = OAuth2AuthorizationCodeBearer(
+    authorizationUrl="placeholder_auth_url",
+    tokenUrl="placeholder_token_url",
+    auto_error=False
+)
 
+def get_auth_dependency():
+    if AUTH_MODE == "none":
+        async def no_auth():
+            logger.debug({"event": "auth_check_skipped", "reason": "No authentication required"})
+            return None
+        return no_auth
+    
+    elif AUTH_MODE == "bearer":
+        async def bearer_auth(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer)):
+            if credentials is None or credentials.credentials not in VALID_TOKENS:
+                raise HTTPException(401, detail="Invalid or missing bearer token", headers={"WWW-Authenticate": "Bearer"})
+            logger.info({"event": "authenticated", "token_ending": credentials.credentials[-4:]})
+            return credentials
+        return bearer_auth
+    
+    elif AUTH_MODE == "openid":
+        async def openid_auth(credentials: Optional[str] = Depends(security_openid)):
+            # Placeholder for OIDC validation (to be implemented later)
+            logger.warning({"event": "openid_not_implemented", "message": "OpenID Connect support pending"})
+            raise HTTPException(501, detail="OpenID Connect not yet implemented")
+        return openid_auth
+
+optional_auth = get_auth_dependency()
 
 analyzer_redis_host = os.getenv('D4_ANALYZER_REDIS_HOST', '127.0.0.1')
 analyzer_redis_port = int(os.getenv('D4_ANALYZER_REDIS_PORT', 6400))
@@ -766,8 +792,8 @@ class DNSRecord(BaseModel):
     rrname: str
     rrtype: str
     rdata: str
-    time_first: Union[int, str]  # Union for Python 3.8 compatibility
-    time_last: Union[int, str]   # Union for Python 3.8 compatibility
+    time_first: Union[int, str]
+    time_last: Union[int, str]
     count: int
     origin: Optional[str] = None
 
@@ -1085,4 +1111,3 @@ async def stream(
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8400)
-
