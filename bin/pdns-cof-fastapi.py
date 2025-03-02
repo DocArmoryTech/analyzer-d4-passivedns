@@ -19,7 +19,7 @@ from fastapi import FastAPI, HTTPException, Query, Response, Depends
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
-from typing import List, Optional, AsyncGenerator, Literal
+from typing import List, Optional, AsyncGenerator, Literal, Union
 
 import uvicorn
 
@@ -768,8 +768,8 @@ class DNSRecord(BaseModel):
     rrname: str
     rrtype: str
     rdata: str
-    time_first: int | str
-    time_last: int | str
+    time_first: Union[int, str]
+    time_last: Union[int, str]
     count: int
     origin: Optional[str] = None
 
