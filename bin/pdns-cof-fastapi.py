@@ -824,7 +824,7 @@ async def get_redis():
     try:
         yield client
     finally:
-        await client.close()
+        await client.aclose()
 
 # Helper functions
 async def get_timestamps_and_count(redis_client: redis.Redis, t1: str, t2: str, rr_values: List[str]) -> Tuple[Optional[int], Optional[int], Optional[int]]:
