@@ -14,6 +14,8 @@
 # Copyright (c) 2013-2022 Alexandre Dulaunoy - a@foo.be
 # Copyright (c) 2019-2022 Computer Incident Response Center Luxembourg (CIRCL)
 
+import threading
+from time import sleep
 from fastapi import FastAPI, HTTPException, Query, Response, Depends, Request
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials, OAuth2AuthorizationCodeBearer
@@ -727,7 +729,7 @@ def token_reload_thread():
     """Runs a background thread that reloads tokens every 60 seconds."""
     while True:
         load_bearer_tokens()
-        time.sleep(60)  # Reload every 60 seconds
+        sleep(60)  # Reload every 60 seconds
 
 @app.on_event("startup")
 def startup_event():
