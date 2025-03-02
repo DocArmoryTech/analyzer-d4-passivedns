@@ -891,11 +891,11 @@ async def get_redis():
         logger.error({"event": "redis_unavailable", "error": str(e), "message": "Redis service not available"})
         raise HTTPException(
             status_code=503,
-            detail="Redis service is temporarily unavailable. Please try again later.",
+            detail="Dataset temporarily unavailable. Please try again later.",
             headers={"Retry-After": "5"}
         )
     except Exception as e:
-        logger.error({"event": "redis_error", "error": str(e), "message": "Unexpected error connecting to Redis"})
+        logger.error({"event": "redis_error", "error": str(e), "message": "Unexpected error accessing dataset"})
         raise HTTPException(status_code=500, detail="Internal server error")
     finally:
         await client.aclose()
