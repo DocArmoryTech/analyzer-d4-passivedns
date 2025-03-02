@@ -725,10 +725,13 @@ def load_tokens():
     except Exception as e:
         raise RuntimeError(f"Failed to load token file {TOKEN_FILE}: {str(e)}")
 
+# Only load tokens if REQUIRE_AUTH is explicitly true
 if os.getenv("REQUIRE_AUTH", "false").lower() == "true":
     if not os.path.exists(TOKEN_FILE):
         raise RuntimeError(f"Authentication required but token file {TOKEN_FILE} not found")
     load_tokens()
+else:
+    logger.info({"event": "authentication_disabled", "message": "Authentication is off by default unless REQUIRE_AUTH=true"})
 
 class TokenFileHandler(FileSystemEventHandler):
     def on_modified(self, event):
@@ -742,10 +745,12 @@ observer.start()
 security = HTTPBearer()
 async def optional_auth(credentials: HTTPAuthorizationCredentials = Depends(security)):
     if os.getenv("REQUIRE_AUTH", "false").lower() != "true":
+        logger.debug({"event": "auth_check_skipped", "reason": "Authentication disabled by default"})
         return
     if credentials.credentials not in VALID_TOKENS:
         raise HTTPException(401, detail="Invalid or missing bearer token", headers={"WWW-Authenticate": "Bearer"})
     logger.info({"event": "authenticated", "token_ending": credentials.credentials[-4:], "client_ip": get_remote_address(None)})
+
 
 analyzer_redis_host = os.getenv('D4_ANALYZER_REDIS_HOST', '127.0.0.1')
 analyzer_redis_port = int(os.getenv('D4_ANALYZER_REDIS_PORT', 6400))
