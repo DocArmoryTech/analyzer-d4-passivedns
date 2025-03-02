@@ -18,7 +18,7 @@ from fastapi import FastAPI, HTTPException, Query, Response, Depends, Request
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
-from typing import List, Optional, AsyncGenerator, Union
+from typing import List, Optional, AsyncGenerator, Union, Tuple
 import uvicorn
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -827,7 +827,7 @@ async def get_redis():
         await client.close()
 
 # Helper functions
-async def get_timestamps_and_count(redis_client: redis.Redis, t1: str, t2: str, rr_values: List[str]) -> tuple[Optional[int], Optional[int], Optional[int]]:
+async def get_timestamps_and_count(redis_client: redis.Redis, t1: str, t2: str, rr_values: List[str]) -> Tuple[Optional[int], Optional[int], Optional[int]]:
     if not t1 or not t2:
         return None, None, None
     
@@ -842,7 +842,7 @@ async def get_timestamps_and_count(redis_client: redis.Redis, t1: str, t2: str, 
     
     return time_first, time_last, count
 
-async def get_record(redis_client: redis.Redis, t: str, cursor: Optional[str] = None, limit: int = 200, rrtype: Optional[str] = None) -> tuple[List[dict], Optional[str], int]:
+async def get_record(redis_client: redis.Redis, t: str, cursor: Optional[str] = None, limit: int = 200, rrtype: Optional[str] = None) -> Tuple[List[dict], Optional[str], int]:
     if not t:
         return [], None, 0
     
