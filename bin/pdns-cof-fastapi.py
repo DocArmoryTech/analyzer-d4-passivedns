@@ -732,7 +732,7 @@ app.add_exception_handler(429, _rate_limit_exceeded_handler)
 # Authentication setup
 TOKEN_FILE = os.getenv("AUTH_TOKEN_FILE", os.path.join(os.path.dirname(__file__), ".tokens.json"))
 VALID_TOKENS = []
-AUTH_MODE = os.getenv("AUTH_MODE", "none").lower()  # Default to "none"
+AUTH_CONFIG_FILE = os.getenv("AUTH_CONFIG_FILE", "auth_config.json")
 
 def load_bearer_tokens():
     """Loads bearer tokens from the token file into memory."""
@@ -744,6 +744,37 @@ def load_bearer_tokens():
         logger.info(f"Loaded {len(VALID_TOKENS)} tokens from {TOKEN_FILE}")
     except Exception as e:
         logger.error(f"Failed to load token file {TOKEN_FILE}: {str(e)}")
+
+def token_reload_thread():
+    """Runs a background thread that reloads tokens every 60 seconds if bearer auth is used."""
+    while True:
+        # Reload config to check for bearer auth
+        global auth_config
+        try:
+            with open(AUTH_CONFIG_FILE, "r") as f:
+                auth_config = json.load(f)
+            if any(cfg.get("auth") == "bearer" for cfg in auth_config["endpoints"].values()):
+                load_bearer_tokens()
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.warning(f"Failed to reload {AUTH_CONFIG_FILE}: {str(e)}")
+        sleep(60)
+
+# Load auth config at startup
+DEFAULT_CONFIG = {
+    "endpoints": {
+        "info": {"auth": "none"},
+        "query": {"auth": "none"},
+        "fquery": {"auth": "none"},
+        "stream": {"auth": "none"}
+    }
+}
+try:
+    with open(AUTH_CONFIG_FILE, "r") as f:
+        auth_config = json.load(f)
+except (FileNotFoundError, json.JSONDecodeError) as e:
+    logger.warning(f"Failed to load {AUTH_CONFIG_FILE}: {str(e)}, using default config")
+    auth_config = DEFAULT_CONFIG
+
 
 def token_reload_thread():
     """Runs a background thread that reloads tokens every 60 seconds."""
@@ -763,19 +794,6 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down token reload thread")
 
 
-# Load tokens only if bearer mode is enabled
-if AUTH_MODE == "bearer":
-    if not os.path.exists(TOKEN_FILE):
-        raise RuntimeError(f"Bearer authentication requires token file {TOKEN_FILE}")
-    load_bearer_tokens()
-elif AUTH_MODE == "none":
-    logger.info({"event": "authentication_disabled", "message": "No authentication required by default"})
-elif AUTH_MODE == "openid":
-    logger.info({"event": "openid_placeholder", "message": "OpenID Connect not yet implemented"})
-else:
-    raise ValueError(f"Invalid AUTH_MODE: {AUTH_MODE}. Use 'none', 'bearer', or 'openid'")
-
-
 # Authentication dependencies
 security_bearer = HTTPBearer(auto_error=False)
 security_openid = OAuth2AuthorizationCodeBearer(
@@ -785,26 +803,27 @@ security_openid = OAuth2AuthorizationCodeBearer(
 )
 
 def get_auth_dependency():
-    if AUTH_MODE == "none":
-        async def no_auth():
-            logger.debug({"event": "auth_check_skipped", "reason": "No authentication required"})
+    async def dynamic_auth(request: Request):
+        # Extract endpoint name from path (e.g., "query" from "/query/example.com")
+        path_parts = request.url.path.strip("/").split("/")
+        endpoint = path_parts[0] if path_parts else ""
+        
+        # Get endpoint auth mode, default to "none"
+        mode = auth_config["endpoints"].get(endpoint, {"auth": "none"})["auth"]
+        
+        if mode == "none":
             return None
-        return no_auth
-    
-    elif AUTH_MODE == "bearer":
-        async def bearer_auth(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer)):
-            if credentials is None or credentials.credentials not in VALID_TOKENS:
+        elif mode == "bearer":
+            credentials = await security_bearer(request)
+            if not credentials or credentials.credentials not in VALID_TOKENS:
                 raise HTTPException(401, detail="Invalid or missing bearer token", headers={"WWW-Authenticate": "Bearer"})
-            logger.info({"event": "authenticated", "token_ending": credentials.credentials[-4:]})
             return credentials
-        return bearer_auth
-    
-    elif AUTH_MODE == "openid":
-        async def openid_auth(credentials: Optional[str] = Depends(security_openid)):
-            # Placeholder for OIDC validation (to be implemented later)
-            logger.warning({"event": "openid_not_implemented", "message": "OpenID Connect support pending"})
+        elif mode == "openid":
             raise HTTPException(501, detail="OpenID Connect not yet implemented")
-        return openid_auth
+        else:
+            logger.error(f"Unknown auth mode '{mode}' for endpoint /{endpoint}")
+            raise HTTPException(500, detail="Invalid authentication configuration")
+    return dynamic_auth
 
 optional_auth = get_auth_dependency()
 

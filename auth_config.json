@@ -1,0 +1,8 @@
+{
+    "endpoints": {
+      "info": {"auth": "none"},
+      "query": {"auth": "none"},
+      "fquery": {"auth": "none"},
+      "stream": {"auth": "bearer"}
+    }
+}
