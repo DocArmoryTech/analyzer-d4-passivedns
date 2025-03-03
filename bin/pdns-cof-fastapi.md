@@ -138,21 +138,6 @@ Environment variables customize the server’s behavior:
 - **400 Bad Request**: Invalid `rrtype` with supported types listed.
 - **429 Too Many Requests**: Rate limit exceeded.
 
-## Deployment
-- **Run with Uvicorn**:
-  ```bash
-  uvicorn pdns-cof-fastapi:app --host 0.0.0.0 --port 8400
-  ```
-- **Docker** (example):
-  ```dockerfile
-  FROM python:3.8-slim
-  WORKDIR /app
-  COPY . /app
-  RUN pip install fastapi uvicorn redis slowapi iptools
-  CMD ["uvicorn", "pdns-cof-fastapi:app", "--host", "0.0.0.0", "--port", "8400"]
-  ```
-- **Environment**: Set `AUTH_MODE`, `AUTH_TOKEN_FILE`, Redis vars as needed.
-
 ## Development
 - **Source**: Part of the D4 Project by CIRCL.
 - **License**: GNU Affero General Public License v3.
