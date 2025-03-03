@@ -1,6 +1,6 @@
 # Passive DNS COF FastAPI Server
 
-**pdns-cof-fastapi.py** is an asynchronous implementation of a Passive DNS server, compliant with the [Passive DNS - Common Output Format (COF)](https://tools.ietf.org/html/draft-dulaunoy-dnsop-passive-dns-cof). Built with [FastAPI](https://fastapi.tiangolo.com/), it is an alternative to the Tornado-based server, offering improved performance, interactive documentation, and extensible authentication. This server queries DNS data stored in Redis, supporting both newline-separated JSON (NDJSON) and true JSON responses for backwards compatibility and flexibility.
+**pdns-cof-fastapi.py** is an asynchronous implementation of a Passive DNS server, compliant with the [Passive DNS - Common Output Format (COF)](https://tools.ietf.org/html/draft-dulaunoy-dnsop-passive-dns-cof). Built with [FastAPI](https://fastapi.tiangolo.com/), it is an alternative to the Tornado-based server, offering interactive documentation, and extensible authentication. This server queries DNS data stored in a Redis compatible data store, supporting both newline-separated JSON (NDJSON) and true JSON responses for backwards compatibility and flexibility.
 
 ## Features
 
@@ -16,36 +16,31 @@
 - **Rate Limiting**: Built-in via `slowapi` to prevent abuse.
 - **Pagination**: Cursor-based with `X-Total-Count`, `X-Next-Cursor`, and `X-Pagination-Required` headers.
 
-## Requirements
+## Requirements (supplemental)
 
 - Python 3.8+
 - Dependencies (install via `pip`):
   ```bash
+  . ./PDNSENV/bin/activate/
   pip install fastapi uvicorn redis slowapi iptools
   ```
 - Redis server (e.g., `redis-server` running on `127.0.0.1:6400`).
 
 ## Installation
 
-1. **Clone the Repository** (if applicable):
+1. **Install Dependencies**:
    ```bash
-   git clone <repository-url>
-   cd <repository-directory>
-   ```
-
-2. **Install Dependencies**:
-   ```bash
-   pip install -r requirements.txt
+   pip install -r requirements.fastapi
    ```
    Or manually:
    ```bash
    pip install fastapi uvicorn redis slowapi iptools
    ```
 
-3. **Ensure Redis is Running**:
+2. **Ensure Redis is Running**:
    Start Redis with defaults or configure via environment variables (see Configuration).
 
-4. **Run the Server**:
+3. **Run the Server**:
    ```bash
    python pdns-cof-fastapi.py
    ```
@@ -148,4 +143,3 @@ Environment variables customize the server’s behavior:
 - Bearer token reloading occurs every 60 seconds in a background thread.
 
 For support, contact [CIRCL](mailto:info@circl.lu).
-
