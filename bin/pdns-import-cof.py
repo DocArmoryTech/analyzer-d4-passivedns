@@ -97,7 +97,11 @@ except redis.ConnectionError as e:
     sys.exit(1)
     
 excludesubstrings = ['spamhaus.org', 'asn.cymru.com']
-with open('../etc/records-type.json') as rtypefile:
+rtype_path = os.path.join(os.path.dirname(__file__), '..', 'etc', 'records-type.json')
+if not os.path.exists(rtype_path):
+    logger.critical(f"Records type file not found: {rtype_path}")
+    sys.exit(1)
+with open(rtype_path) as rtypefile:
     rtype = json.load(rtypefile)
 
 dnstype = {}
@@ -205,6 +209,9 @@ def on_message(ws, message):
     except json.JSONDecodeError as e:
         logger.debug(f"Invalid JSON in websocket message: {e}")
 
+def on_error(ws, error):
+    logger.error(f"Websocket error: {error}")
+    
 if args.filetoimport:
     with open(args.filetoimport, "r") as dnsimport:
         reader = ndjson.load(dnsimport)
@@ -212,6 +219,11 @@ if args.filetoimport:
             add_record(rdns=rdns)
 elif args.websocket:
     ws = websocket.WebSocketApp(
-        args.websocket, on_open=on_open, on_close=on_close, on_message=on_message
+        args.websocket, on_open=on_open, on_close=on_close, on_message=on_message, on_error=on_error
     )
-    ws.run_forever()
+    try:
+        ws.run_forever()
+    except KeyboardInterrupt:
+        logger.info("Shutting down websocket gracefully")
+        ws.close()
+        sys.exit(0)
