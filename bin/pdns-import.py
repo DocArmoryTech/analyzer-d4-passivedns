@@ -75,11 +75,15 @@ except (configparser.NoSectionError, configparser.NoOptionError):
 except ValueError:
     logger.critical("'d4-server' must be in 'host:port' format")
     sys.exit(1)
-host_redis_metadata = os.getenv('D4_REDIS_METADATA_HOST', d4_server)
-port_redis_metadata = int(os.getenv('D4_REDIS_METADATA_PORT', d4_port))
 
 r = redis.Redis(host=analyzer_redis_host, port=analyzer_redis_port)
 r_d4 = redis.Redis(host=host_redis_metadata, port=port_redis_metadata, db=2)
+try:
+    r.ping()
+    r_d4.ping()
+except redis.ConnectionError as e:
+    logger.critical(f"Failed to connect to Redis: {e}")
+    sys.exit(1)
 
 rtype_path = os.path.join(os.path.dirname(__file__), '..', 'etc', 'records-type.json')
 if not os.path.exists(rtype_path):
