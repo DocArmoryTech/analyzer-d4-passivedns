@@ -89,8 +89,12 @@ rtype_path = os.path.join(os.path.dirname(__file__), '..', 'etc', 'records-type.
 if not os.path.exists(rtype_path):
     logger.critical(f"Records type file not found: {rtype_path}")
     sys.exit(1)
-with open(rtype_path) as rtypefile:
-    rtype = json.load(rtypefile)
+try:
+    with open(args.filetoimport) as dnsimport:
+        records = json.load(dnsimport)
+except json.JSONDecodeError as e:
+    logger.critical(f"Invalid JSON in input file {args.filetoimport}: {e}")
+    sys.exit(1)
 
 dnstype = {}
 
