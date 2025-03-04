@@ -43,6 +43,15 @@ if not os.path.exists(config_path):
     exit(1)
 config.read(config_path)
 
+# Update logging level after reading config
+mylogginglevel = config.get('global', 'logging-level', fallback='INFO')
+if mylogginglevel == 'DEBUG':
+    logger.setLevel(logging.DEBUG)
+    ch.setLevel(logging.DEBUG)
+elif mylogginglevel == 'INFO':
+    logger.setLevel(logging.INFO)
+    ch.setLevel(logging.INFO)
+    
 parser = argparse.ArgumentParser(
     description='Import array of standard Passive DNS cof format into your Passive DNS server'
 )
