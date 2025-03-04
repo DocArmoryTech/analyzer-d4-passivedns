@@ -76,9 +76,9 @@ with open(args.filetoimport) as dnsimport:
 
 print (records)
 for rdns in records:
-    logger.debug("parsed record: {}".format(r))
+    logger.debug("parsed record: {}".format(rdns))
     if 'rrname' not in rdns:
-        logger.debug('Parsing of passive DNS line is incomplete: {}'.format(l.strip()))
+        logger.debug('Parsing of passive DNS line is incomplete: {}'.format(rdns))
         continue
     if rdns['rrname'] and rdns['rrtype']:
         rdns['type'] = dnstype[rdns['rrtype']]
