@@ -38,12 +38,19 @@ if not os.path.exists(config_path):
     sys.exit(1)
 config.read(config_path)
     
-
-expirations = config.items('expiration')
+try:
+    expirations = config.items('expiration')
+except configparser.NoSectionError:
+    logger.critical("Missing 'expiration' section in config")
+    sys.exit(1)
 excludesubstrings = config.get('exclude', 'substring', fallback='spamhaus.org,asn.cymru.com').split(',')
-myuuid = config.get('global', 'my-uuid')
+try:
+    myuuid = config.get('global', 'my-uuid')
+except (configparser.NoSectionError, configparser.NoOptionError):
+    logger.critical("Missing 'my-uuid' in 'global' section of config")
+    sys.exit(1)
 myqueue = "analyzer:8:{}".format(myuuid)
-mylogginglevel = config.get('global', 'logging-level')
+mylogginglevel = config.get('global', 'logging-level', fallback='INFO')
 logger = logging.getLogger('pdns ingestor')
 ch = logging.StreamHandler()
 if mylogginglevel == 'DEBUG':
@@ -60,8 +67,14 @@ logger.info("Starting and using FIFO {} from D4 server".format(myqueue))
 
 analyzer_redis_host = os.getenv('D4_ANALYZER_REDIS_HOST', '127.0.0.1')
 analyzer_redis_port = int(os.getenv('D4_ANALYZER_REDIS_PORT', 6400))
-
-d4_server, d4_port = config.get('global', 'd4-server').split(':')
+try:
+    d4_server, d4_port = config.get('global', 'd4-server').split(':')
+except (configparser.NoSectionError, configparser.NoOptionError):
+    logger.critical("Missing 'd4-server' in 'global' section of config")
+    sys.exit(1)
+except ValueError:
+    logger.critical("'d4-server' must be in 'host:port' format")
+    sys.exit(1)
 host_redis_metadata = os.getenv('D4_REDIS_METADATA_HOST', d4_server)
 port_redis_metadata = int(os.getenv('D4_REDIS_METADATA_PORT', d4_port))
 
