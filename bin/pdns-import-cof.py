@@ -190,10 +190,7 @@ def add_record(rdns=None):
             logger.debug(f"Expiration {expiration} applied to {lastseen}")
 
         occ = "o:{}:{}:{}".format(rdns['rrname'], rdns['v'], rdns['type'])
-        if 'count' in rdns:
-            r.set(occ, rdns['count'])
-        else:
-            r.incrby(occ, amount=1)
+        r.incrby(occ, int(rdns.get('count', 1)))
         if expiration:
             r.expire(occ, expiration)
             logger.debug(f"Expiration {expiration} applied to {occ}")
