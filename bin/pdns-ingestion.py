@@ -25,7 +25,11 @@ import logging
 import os
 
 config = configparser.RawConfigParser()
-config.read(os.path.join(os.path.dirname(__file__), '..', 'etc', 'analyzer.conf'))
+config_path = os.path.join(os.path.dirname(__file__), '..', 'etc', 'analyzer.conf')
+if not os.path.exists(config_path):
+    logger.critical(f"Configuration file not found: {config_path}")
+    exit(1)
+config.read(config_path)
 
 expirations = config.items('expiration')
 excludesubstrings = config.get('exclude', 'substring', fallback='spamhaus.org,asn.cymru.com').split(',')
@@ -57,7 +61,11 @@ r = redis.Redis(host=analyzer_redis_host, port=analyzer_redis_port)
 r_d4 = redis.Redis(host=host_redis_metadata, port=port_redis_metadata, db=2)
 
 
-with open(os.path.join(os.path.dirname(__file__), '..', 'etc', 'records-type.json')) as rtypefile:
+rtype_path = os.path.join(os.path.dirname(__file__), '..', 'etc', 'records-type.json')
+if not os.path.exists(rtype_path):
+    logger.critical(f"Records type file not found: {rtype_path}")
+    exit(1)
+with open(rtype_path) as rtypefile:
     rtype = json.load(rtypefile)
 
 dnstype = {}
