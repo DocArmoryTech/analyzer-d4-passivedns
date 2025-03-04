@@ -126,10 +126,11 @@ for rdns in records:
         if excludeflag:
             logger.debug('Excluded {}'.format(rdns['rrname']))
             continue
-        # Set expiration based on type
-        for y in expirations:
-            if y[0] == rdns['type']:
-                expiration = y[1]
+        # Set expiration based on numeric type (as string)
+        expiration = None  # Reset per record
+        for exp_type, exp_time in expirations:
+            if exp_type == rdns['type']:
+                expiration = int(exp_time)  # Convert to int for Redis
                 break
         if rdns['type'] == '16':
             rdns['v'] = rdns['v'].replace("\"", "", 1)
@@ -138,14 +139,14 @@ for rdns in records:
         r.sadd(query, rdns['v'])
         if expiration:
             r.expire(query, expiration)
-            logger.debug("Expiration {} applied to {}".format(expiration, query))
-        
+            logger.debug(f"Expiration {expiration} applied to {query}")
+
         res = "v:{}:{}".format(rdns['v'], rdns['type'])
         logger.debug('redis sadd: {} -> {}'.format(res, rdns['rrname']))
         r.sadd(res, rdns['rrname'])
         if expiration:
             r.expire(res, expiration)
-            logger.debug("Expiration {} applied to {}".format(expiration, res))
+            logger.debug(f"Expiration {expiration} applied to {res}")
 
         firstseen = "s:{}:{}:{}".format(rdns['rrname'], rdns['v'], rdns['type'])
         if not r.exists(firstseen):
@@ -153,7 +154,7 @@ for rdns in records:
             logger.debug('redis set: {} -> {}'.format(firstseen, rdns['time_first']))
         if expiration:
             r.expire(firstseen, expiration)
-            logger.debug("Expiration {} applied to {}".format(expiration, firstseen))
+            logger.debug(f"Expiration {expiration} applied to {firstseen}")
 
         lastseen = "l:{}:{}:{}".format(rdns['rrname'], rdns['v'], rdns['type'])
         last = r.get(lastseen)
@@ -162,13 +163,13 @@ for rdns in records:
             logger.debug('redis set: {} -> {}'.format(lastseen, rdns['time_last']))
         if expiration:
             r.expire(lastseen, expiration)
-            logger.debug("Expiration {} applied to {}".format(expiration, lastseen))
+            logger.debug(f"Expiration {expiration} applied to {lastseen}")
 
         occ = "o:{}:{}:{}".format(rdns['rrname'], rdns['v'], rdns['type'])
         r.set(occ, rdns['count'])
         if expiration:
             r.expire(occ, expiration)
-            logger.debug("Expiration {} applied to {}".format(expiration, occ))
+            logger.debug(f"Expiration {expiration} applied to {occ}")
 
         if stats:
             r.incrby('stats:processed', amount=1)
