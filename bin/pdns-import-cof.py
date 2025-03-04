@@ -45,7 +45,13 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-
+if args.filetoimport and args.websocket:
+    logger.critical("Cannot specify both --file and --websocket")
+    sys.exit(1)
+if not args.filetoimport and not args.websocket:
+    parser.print_help()
+    sys.exit(0)
+    
 config = configparser.RawConfigParser()
 config_path = os.path.join(os.path.dirname(__file__), '..', 'etc', 'analyzer.conf')
 if not os.path.exists(config_path):
