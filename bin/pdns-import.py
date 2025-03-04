@@ -39,6 +39,9 @@ parser = argparse.ArgumentParser(description='Import array of standard Passive D
 parser.add_argument('--file', dest='filetoimport', help='JSON file to import')
 args = parser.parse_args()
 
+if not args.filetoimport:
+    parser.print_help()
+    sys.exit(0)
 if not os.path.exists(args.filetoimport):
     logger.critical(f"Input file not found: {args.filetoimport}")
     sys.exit(1)
