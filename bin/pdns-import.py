@@ -153,6 +153,6 @@ for rdns in records:
 
         if stats:
             r.incrby('stats:processed', amount=1)
-    if not r:
+    if not rdns:
         logger.info('empty passive dns record')
         continue
