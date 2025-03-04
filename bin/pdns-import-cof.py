@@ -53,6 +53,9 @@ if not args.filetoimport and not args.websocket:
     sys.exit(0)
 
 if args.filetoimport:
+    if not os.path.exists(args.filetoimport):
+        logger.critical(f"Input file not found: {args.filetoimport}")
+        sys.exit(1)
     try:
         with open(args.filetoimport, "r") as dnsimport:
             reader = ndjson.load(dnsimport)
