@@ -25,8 +25,19 @@ parser = argparse.ArgumentParser(description='Import array of standard Passive D
 parser.add_argument('--file', dest='filetoimport', help='JSON file to import')
 args = parser.parse_args()
 
+if not os.path.exists(args.filetoimport):
+    logger.critical(f"Input file not found: {args.filetoimport}")
+    sys.exit(1)
+with open(args.filetoimport) as dnsimport:
+    records = json.load(dnsimport)
+
 config = configparser.RawConfigParser()
-config.read(os.path.join(os.path.dirname(__file__), '..', 'etc', 'analyzer.conf'))
+config_path = os.path.join(os.path.dirname(__file__), '..', 'etc', 'analyzer.conf')
+if not os.path.exists(config_path):
+    logger.critical(f"Configuration file not found: {config_path}")
+    sys.exit(1)
+config.read(config_path)
+    
 
 expirations = config.items('expiration')
 excludesubstrings = config.get('exclude', 'substring', fallback='spamhaus.org,asn.cymru.com').split(',')
@@ -57,7 +68,11 @@ port_redis_metadata = int(os.getenv('D4_REDIS_METADATA_PORT', d4_port))
 r = redis.Redis(host=analyzer_redis_host, port=analyzer_redis_port)
 r_d4 = redis.Redis(host=host_redis_metadata, port=port_redis_metadata, db=2)
 
-with open(os.path.join(os.path.dirname(__file__), '..', 'etc', 'records-type.json')) as rtypefile:
+rtype_path = os.path.join(os.path.dirname(__file__), '..', 'etc', 'records-type.json')
+if not os.path.exists(rtype_path):
+    logger.critical(f"Records type file not found: {rtype_path}")
+    sys.exit(1)
+with open(rtype_path) as rtypefile:
     rtype = json.load(rtypefile)
 
 dnstype = {}
