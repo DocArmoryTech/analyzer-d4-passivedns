@@ -21,6 +21,20 @@ import sys
 import argparse
 import os
 
+# Initialize logger early
+logger = logging.getLogger('pdns ingestor')
+ch = logging.StreamHandler()
+mylogginglevel = 'INFO'  # Temporary default (INFO is safer than DEBUG)
+if mylogginglevel == 'DEBUG':
+    logger.setLevel(logging.DEBUG)
+    ch.setLevel(logging.DEBUG)
+else:  # Default to INFO
+    logger.setLevel(logging.INFO)
+    ch.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+ch.setFormatter(formatter)
+logger.addHandler(ch)
+
 parser = argparse.ArgumentParser(description='Import array of standard Passive DNS cof format into your Passive DNS server')
 parser.add_argument('--file', dest='filetoimport', help='JSON file to import')
 args = parser.parse_args()
@@ -28,9 +42,14 @@ args = parser.parse_args()
 if not os.path.exists(args.filetoimport):
     logger.critical(f"Input file not found: {args.filetoimport}")
     sys.exit(1)
-with open(args.filetoimport) as dnsimport:
-    records = json.load(dnsimport)
 
+try:
+    with open(args.filetoimport) as dnsimport:
+        records = json.load(dnsimport)
+except json.JSONDecodeError as e:
+    logger.critical(f"Invalid JSON in input file {args.filetoimport}: {e}")
+    sys.exit(1)
+    
 config = configparser.RawConfigParser()
 config_path = os.path.join(os.path.dirname(__file__), '..', 'etc', 'analyzer.conf')
 if not os.path.exists(config_path):
@@ -51,22 +70,13 @@ except (configparser.NoSectionError, configparser.NoOptionError):
     sys.exit(1)
 myqueue = "analyzer:8:{}".format(myuuid)
 mylogginglevel = config.get('global', 'logging-level', fallback='INFO')
-logger = logging.getLogger('pdns ingestor')
-ch = logging.StreamHandler()
 if mylogginglevel == 'DEBUG':
     logger.setLevel(logging.DEBUG)
     ch.setLevel(logging.DEBUG)
 elif mylogginglevel == 'INFO':
     logger.setLevel(logging.INFO)
     ch.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-ch.setFormatter(formatter)
-logger.addHandler(ch)
-
-logger.info("Starting and using FIFO {} from D4 server".format(myqueue))
-
-analyzer_redis_host = os.getenv('D4_ANALYZER_REDIS_HOST', '127.0.0.1')
-analyzer_redis_port = int(os.getenv('D4_ANALYZER_REDIS_PORT', 6400))
+    
 try:
     d4_server, d4_port = config.get('global', 'd4-server').split(':')
 except (configparser.NoSectionError, configparser.NoOptionError):
@@ -75,6 +85,13 @@ except (configparser.NoSectionError, configparser.NoOptionError):
 except ValueError:
     logger.critical("'d4-server' must be in 'host:port' format")
     sys.exit(1)
+
+logger.info("Starting and using FIFO {} from D4 server".format(myqueue))
+
+analyzer_redis_host = os.getenv('D4_ANALYZER_REDIS_HOST', '127.0.0.1')
+analyzer_redis_port = int(os.getenv('D4_ANALYZER_REDIS_PORT', 6400))
+host_redis_metadata = os.getenv('D4_REDIS_METADATA_HOST', d4_server)
+port_redis_metadata = int(os.getenv('D4_REDIS_METADATA_PORT', d4_port))
 
 r = redis.Redis(host=analyzer_redis_host, port=analyzer_redis_port)
 r_d4 = redis.Redis(host=host_redis_metadata, port=port_redis_metadata, db=2)
@@ -89,28 +106,19 @@ rtype_path = os.path.join(os.path.dirname(__file__), '..', 'etc', 'records-type.
 if not os.path.exists(rtype_path):
     logger.critical(f"Records type file not found: {rtype_path}")
     sys.exit(1)
-try:
-    with open(args.filetoimport) as dnsimport:
-        records = json.load(dnsimport)
-except json.JSONDecodeError as e:
-    logger.critical(f"Invalid JSON in input file {args.filetoimport}: {e}")
-    sys.exit(1)
+
+with open(rtype_path) as rtypefile:
+    rtype = json.load(rtypefile)
 
 dnstype = {}
-
-stats = True
 
 for v in rtype:
     dnstype[(v['type'])] = v['value']
 
-expiration = None
-if not (args.filetoimport):
-    parser.print_help()
-    sys.exit(0)
-with open(args.filetoimport) as dnsimport:
-    records = json.load(dnsimport)
+stats = True
 
-print (records)
+expiration = None
+
 for rdns in records:
     logger.debug("parsed record: {}".format(rdns))
     if 'rrname' not in rdns:
