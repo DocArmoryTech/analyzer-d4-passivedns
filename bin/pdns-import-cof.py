@@ -99,7 +99,8 @@ except redis.ConnectionError as e:
     logger.critical(f"Failed to connect to Redis: {e}")
     sys.exit(1)
     
-excludesubstrings = ['spamhaus.org', 'asn.cymru.com']
+
+excludesubstrings = config.get('exclude', 'substring', fallback='spamhaus.org,asn.cymru.com').split(',')
 rtype_path = os.path.join(os.path.dirname(__file__), '..', 'etc', 'records-type.json')
 if not os.path.exists(rtype_path):
     logger.critical(f"Records type file not found: {rtype_path}")
