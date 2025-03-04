@@ -29,7 +29,7 @@ mylogginglevel = 'INFO'  # Temporary default (INFO is safer than DEBUG)
 if mylogginglevel == 'DEBUG':
     logger.setLevel(logging.DEBUG)
     ch.setLevel(logging.DEBUG)
-else:  # Default to INFO
+elif:  # Default to INFO
     logger.setLevel(logging.INFO)
     ch.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -223,10 +223,8 @@ def on_error(ws, error):
     logger.error(f"Websocket error: {error}")
     
 if args.filetoimport:
-    with open(args.filetoimport, "r") as dnsimport:
-        reader = ndjson.load(dnsimport)
-        for rdns in reader:
-            add_record(rdns=rdns)
+    for rdns in reader:
+        add_record(rdns=rdns)
 elif args.websocket:
     ws = websocket.WebSocketApp(
         args.websocket, on_open=on_open, on_close=on_close, on_message=on_message, on_error=on_error
