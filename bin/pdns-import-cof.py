@@ -36,6 +36,13 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
+config = configparser.RawConfigParser()
+config_path = os.path.join(os.path.dirname(__file__), '..', 'etc', 'analyzer.conf')
+if not os.path.exists(config_path):
+    logger.critical(f"Configuration file not found: {config_path}")
+    exit(1)
+config.read(config_path)
+
 parser = argparse.ArgumentParser(
     description='Import array of standard Passive DNS cof format into your Passive DNS server'
 )
