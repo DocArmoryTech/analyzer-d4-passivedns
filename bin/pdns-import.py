@@ -166,7 +166,7 @@ for rdns in records:
             logger.debug(f"Expiration {expiration} applied to {lastseen}")
 
         occ = "o:{}:{}:{}".format(rdns['rrname'], rdns['v'], rdns['type'])
-        r.set(occ, rdns['count'])
+        r.incrby(occ, int(rdns['count']))
         if expiration:
             r.expire(occ, expiration)
             logger.debug(f"Expiration {expiration} applied to {occ}")
