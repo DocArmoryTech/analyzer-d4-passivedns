@@ -197,6 +197,6 @@ while (True):
             r.hincrby('dist:type', rdns['type'], amount=1)
         if stats:
             r.incrby('stats:processed', amount=1)
-    if not r:
+    if not rdns:
         logger.info('empty passive dns record')
         continue
