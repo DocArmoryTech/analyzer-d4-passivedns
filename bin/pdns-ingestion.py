@@ -33,8 +33,22 @@ config.read(config_path)
 
 expirations = config.items('expiration')
 excludesubstrings = config.get('exclude', 'substring', fallback='spamhaus.org,asn.cymru.com').split(',')
-myuuid = config.get('global', 'my-uuid')
+try:
+    myuuid = config.get('global', 'my-uuid')
+except (configparser.NoSectionError, configparser.NoOptionError):
+    logger.critical("Missing 'my-uuid' in 'global' section of config")
+    exit(1)
 myqueue = "analyzer:8:{}".format(myuuid)
+mylogginglevel = config.get('global', 'logging-level', fallback='INFO')  # Default to INFO
+
+try:
+    d4_server, d4_port = config.get('global', 'd4-server').split(':')
+except (configparser.NoSectionError, configparser.NoOptionError):
+    logger.critical("Missing 'd4-server' in 'global' section of config")
+    exit(1)
+except ValueError:
+    logger.critical("'d4-server' must be in 'host:port' format")
+    exit(1)
 mylogginglevel = config.get('global', 'logging-level')
 logger = logging.getLogger('pdns ingestor')
 ch = logging.StreamHandler()
