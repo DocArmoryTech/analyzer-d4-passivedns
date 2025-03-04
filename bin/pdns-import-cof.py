@@ -22,6 +22,20 @@ import ndjson
 # ! websocket-client not websocket
 import websocket
 
+# Initialize logger early
+logger = logging.getLogger('pdns ingestor')
+ch = logging.StreamHandler()
+mylogginglevel = 'INFO'  # Temporary default (INFO is safer than DEBUG)
+if mylogginglevel == 'DEBUG':
+    logger.setLevel(logging.DEBUG)
+    ch.setLevel(logging.DEBUG)
+else:  # Default to INFO
+    logger.setLevel(logging.INFO)
+    ch.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+ch.setFormatter(formatter)
+logger.addHandler(ch)
+
 parser = argparse.ArgumentParser(
     description='Import array of standard Passive DNS cof format into your Passive DNS server'
 )
