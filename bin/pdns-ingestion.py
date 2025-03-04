@@ -14,21 +14,21 @@
 # Copyright (c) Computer Incident Response Center Luxembourg (CIRCL)
 
 
-import re
+
 import redis
-import fileinput
+
 import json
 import configparser
 import time
 import logging
-import sys
+
 import os
 
 config = configparser.RawConfigParser()
-config.read('../etc/analyzer.conf')
+config.read(os.path.join(os.path.dirname(__file__), '..', 'etc', 'analyzer.conf'))
 
 expirations = config.items('expiration')
-excludesubstrings = config.get('exclude', 'substring').split(',')
+excludesubstrings = config.get('exclude', 'substring', fallback='spamhaus.org,asn.cymru.com').split(',')
 myuuid = config.get('global', 'my-uuid')
 myqueue = "analyzer:8:{}".format(myuuid)
 mylogginglevel = config.get('global', 'logging-level')
@@ -57,7 +57,7 @@ r = redis.Redis(host=analyzer_redis_host, port=analyzer_redis_port)
 r_d4 = redis.Redis(host=host_redis_metadata, port=port_redis_metadata, db=2)
 
 
-with open('../etc/records-type.json') as rtypefile:
+with open(os.path.join(os.path.dirname(__file__), '..', 'etc', 'records-type.json')) as rtypefile:
     rtype = json.load(rtypefile)
 
 dnstype = {}
