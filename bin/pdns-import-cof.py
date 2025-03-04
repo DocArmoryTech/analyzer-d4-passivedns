@@ -51,7 +51,17 @@ if args.filetoimport and args.websocket:
 if not args.filetoimport and not args.websocket:
     parser.print_help()
     sys.exit(0)
-    
+
+if args.filetoimport:
+    try:
+        with open(args.filetoimport, "r") as dnsimport:
+            reader = ndjson.load(dnsimport)
+            for rdns in reader:
+                add_record(rdns=rdns)
+    except json.JSONDecodeError as e:
+        logger.critical(f"Invalid NDJSON in file {args.filetoimport}: {e}")
+        sys.exit(1)
+
 config = configparser.RawConfigParser()
 config_path = os.path.join(os.path.dirname(__file__), '..', 'etc', 'analyzer.conf')
 if not os.path.exists(config_path):
@@ -161,8 +171,10 @@ def on_close(ws):
 
 def on_message(ws, message):
     logger.debug('Message received via websocket')
-    add_record(rdns=json.loads(message))
-
+    try:
+        add_record(rdns=json.loads(message))
+    except json.JSONDecodeError as e:
+        logger.debug(f"Invalid JSON in websocket message: {e}")
 
 if args.filetoimport:
     with open(args.filetoimport, "r") as dnsimport:
