@@ -849,13 +849,13 @@ class DNSRecord(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "rrname": "example.com",
-                "rrtype": "A",
-                "rdata": "93.184.216.34",
-                "time_first": 1234567890,
-                "time_last": 1234567899,
-                "count": 100,
-                "origin": "origin.example"
+                "rrtype": "AAAA",
+                "rdata": "2a02:250:0:8::53",
+                "rrname": "xn--ihuvudetpevap-xfb.se",
+                "time_first": 1657878272,
+                "time_last": 1657878272,
+                "count": 1,
+                "origin": "origin not configured"
             }
         }
 
@@ -967,12 +967,12 @@ async def get_record(redis_client: redis.Redis, t: str, cursor: Optional[str] = 
                 if time_first is None:
                     continue
                 rrval = {
+                    "rrtype": next(rr['Type'] for rr in rrset if rr['Value'] == value),
+                    "rdata": rdata,
+                    "rrname": t,
                     "time_first": time_first,
                     "time_last": time_last,
                     "count": count,
-                    "rrtype": next(rr['Type'] for rr in rrset if rr['Value'] == value),
-                    "rrname": t,
-                    "rdata": rdata,
                     "origin": origin if origin else None
                 }
                 rrfound.append(rrval)
@@ -1007,12 +1007,12 @@ async def stream_records(redis_client: redis.Redis, t: str, chunk_size: int) -> 
                     if time_first is None:
                         continue
                     record = {
+                        "rrtype": rr['Type'],
+                        "rdata": rdata,
+                        "rrname": t,
                         "time_first": time_first,
                         "time_last": time_last,
                         "count": count,
-                        "rrtype": rr['Type'],
-                        "rrname": t,
-                        "rdata": rdata,
                         "origin": origin if origin else None
                     }
                     yield f"{json.dumps(record)}\n"
@@ -1028,12 +1028,12 @@ async def stream_records(redis_client: redis.Redis, t: str, chunk_size: int) -> 
                         if time_first is None:
                             continue
                         record = {
+                            "rrtype": rr['Type'],
+                            "rdata": rdata,
+                            "rrname": t,
                             "time_first": time_first,
                             "time_last": time_last,
                             "count": count,
-                            "rrtype": rr['Type'],
-                            "rrname": t,
-                            "rdata": rdata,
                             "origin": origin if origin else None
                         }
                         yield f"{json.dumps(record)}\n"
