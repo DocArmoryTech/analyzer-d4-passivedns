@@ -35,6 +35,16 @@ else:  # Default to INFO
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 ch.setFormatter(formatter)
 logger.addHandler(ch)
+    
+parser = argparse.ArgumentParser(
+    description='Import array of standard Passive DNS cof format into your Passive DNS server'
+)
+parser.add_argument('--file', dest='filetoimport', help='JSON file to import')
+parser.add_argument(
+    '--websocket', dest='websocket', help='Import from a websocket stream'
+)
+args = parser.parse_args()
+
 
 config = configparser.RawConfigParser()
 config_path = os.path.join(os.path.dirname(__file__), '..', 'etc', 'analyzer.conf')
@@ -51,31 +61,19 @@ if mylogginglevel == 'DEBUG':
 elif mylogginglevel == 'INFO':
     logger.setLevel(logging.INFO)
     ch.setLevel(logging.INFO)
-    
-parser = argparse.ArgumentParser(
-    description='Import array of standard Passive DNS cof format into your Passive DNS server'
-)
-parser.add_argument('--file', dest='filetoimport', help='JSON file to import')
-parser.add_argument(
-    '--websocket', dest='websocket', help='Import from a websocket stream'
-)
-args = parser.parse_args()
-
-
-logger = logging.getLogger('pdns ingestor')
-ch = logging.StreamHandler()
-logger.setLevel(logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-ch.setFormatter(formatter)
-logger.addHandler(ch)
 
 logger.info("Starting COF ingestor")
 
 analyzer_redis_host = os.getenv('D4_ANALYZER_REDIS_HOST', '127.0.0.1')
 analyzer_redis_port = int(os.getenv('D4_ANALYZER_REDIS_PORT', 6400))
 
-r = redis.Redis(host='127.0.0.1', port=6400)
-
+r = redis.Redis(host=analyzer_redis_host, port=analyzer_redis_port)
+try:
+    r.ping()
+except redis.ConnectionError as e:
+    logger.critical(f"Failed to connect to Redis: {e}")
+    sys.exit(1)
+    
 excludesubstrings = ['spamhaus.org', 'asn.cymru.com']
 with open('../etc/records-type.json') as rtypefile:
     rtype = json.load(rtypefile)
