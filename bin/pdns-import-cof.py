@@ -80,6 +80,12 @@ elif mylogginglevel == 'INFO':
 
 logger.info("Starting COF ingestor")
 
+try:
+    expirations = config.items('expiration')
+except configparser.NoSectionError:
+    logger.critical("Missing 'expiration' section in config")
+    sys.exit(1)
+
 analyzer_redis_host = os.getenv('D4_ANALYZER_REDIS_HOST', '127.0.0.1')
 analyzer_redis_port = int(os.getenv('D4_ANALYZER_REDIS_PORT', 6400))
 
@@ -100,6 +106,7 @@ stats = True
 
 for v in rtype:
     dnstype[(v['type'])] = v['value']
+
 
 expiration = None
 if (not (args.filetoimport)) and (not (args.websocket)):
