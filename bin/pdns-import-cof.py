@@ -161,17 +161,27 @@ def add_record(rdns=None):
 
         firstseen = "s:{}:{}:{}".format(rdns['rrname'], rdns['v'], rdns['type'])
         if not r.exists(firstseen):
-            r.set(firstseen, int(float(rdns['time_first'])))
-            logger.debug('redis set: {} -> {}'.format(firstseen, rdns['time_first']))
+            try:
+                firstseen_val = int(float(rdns['time_first']))
+                r.set(firstseen, firstseen_val)
+                logger.debug('redis set: {} -> {}'.format(firstseen, rdns['time_first']))
+            except (ValueError, TypeError, KeyError):
+                logger.debug(f"Invalid or missing time_first in record: {rdns}")
+                return False
         if expiration:
             r.expire(firstseen, expiration)
             logger.debug(f"Expiration {expiration} applied to {firstseen}")
 
         lastseen = "l:{}:{}:{}".format(rdns['rrname'], rdns['v'], rdns['type'])
         last = r.get(lastseen)
-        if last is None or int(float(last)) < int(float(rdns['time_last'])):
-            r.set(lastseen, int(float(rdns['time_last'])))
-            logger.debug('redis set: {} -> {}'.format(lastseen, rdns['time_last']))
+        try:
+            lastseen_val = int(float(rdns['time_last']))
+            if last is None or int(float(last)) < lastseen_val:
+                r.set(lastseen, lastseen_val)
+                logger.debug('redis set: {} -> {}'.format(lastseen, rdns['time_last']))
+        except (ValueError, TypeError, KeyError):
+            logger.debug(f"Invalid or missing time_last in record: {rdns}")
+            return False
         if expiration:
             r.expire(lastseen, expiration)
             logger.debug(f"Expiration {expiration} applied to {lastseen}")
