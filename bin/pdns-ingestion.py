@@ -13,16 +13,22 @@
 # Copyright (c) 2019 Alexandre Dulaunoy - a@foo.be
 # Copyright (c) Computer Incident Response Center Luxembourg (CIRCL)
 
-
-
 import redis
-
 import json
 import configparser
 import time
 import logging
-
 import os
+
+# Initialize logger early with a default level
+logger = logging.getLogger('pdns ingestor')
+ch = logging.StreamHandler()
+# Temporary default until config is read
+logger.setLevel(logging.DEBUG)
+ch.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+ch.setFormatter(formatter)
+logger.addHandler(ch)
 
 config = configparser.RawConfigParser()
 config_path = os.path.join(os.path.dirname(__file__), '..', 'etc', 'analyzer.conf')
@@ -30,6 +36,15 @@ if not os.path.exists(config_path):
     logger.critical(f"Configuration file not found: {config_path}")
     exit(1)
 config.read(config_path)
+
+# Update logging level after reading config
+mylogginglevel = config.get('global', 'logging-level', fallback='INFO')
+if mylogginglevel == 'DEBUG':
+    logger.setLevel(logging.DEBUG)
+    ch.setLevel(logging.DEBUG)
+elif mylogginglevel == 'INFO':
+    logger.setLevel(logging.INFO)
+    ch.setLevel(logging.INFO)
 
 expirations = config.items('expiration')
 excludesubstrings = config.get('exclude', 'substring', fallback='spamhaus.org,asn.cymru.com').split(',')
@@ -39,7 +54,6 @@ except (configparser.NoSectionError, configparser.NoOptionError):
     logger.critical("Missing 'my-uuid' in 'global' section of config")
     exit(1)
 myqueue = "analyzer:8:{}".format(myuuid)
-mylogginglevel = config.get('global', 'logging-level', fallback='INFO')  # Default to INFO
 
 try:
     d4_server, d4_port = config.get('global', 'd4-server').split(':')
@@ -49,25 +63,11 @@ except (configparser.NoSectionError, configparser.NoOptionError):
 except ValueError:
     logger.critical("'d4-server' must be in 'host:port' format")
     exit(1)
-mylogginglevel = config.get('global', 'logging-level')
-logger = logging.getLogger('pdns ingestor')
-ch = logging.StreamHandler()
-if mylogginglevel == 'DEBUG':
-    logger.setLevel(logging.DEBUG)
-    ch.setLevel(logging.DEBUG)
-elif mylogginglevel == 'INFO':
-    logger.setLevel(logging.INFO)
-    ch.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-ch.setFormatter(formatter)
-logger.addHandler(ch)
 
 logger.info("Starting and using FIFO {} from D4 server".format(myqueue))
 
 analyzer_redis_host = os.getenv('D4_ANALYZER_REDIS_HOST', '127.0.0.1')
 analyzer_redis_port = int(os.getenv('D4_ANALYZER_REDIS_PORT', 6400))
-
-d4_server, d4_port = config.get('global', 'd4-server').split(':')
 host_redis_metadata = os.getenv('D4_REDIS_METADATA_HOST', d4_server)
 port_redis_metadata = int(os.getenv('D4_REDIS_METADATA_PORT', d4_port))
 
@@ -120,83 +120,84 @@ def process_format_passivedns(line=None):
         i = i + 1
     return record
 
-
-while (True):
-    expiration = None
-    d4_record_line = r_d4.rpop(myqueue)
-    if d4_record_line is None:
-        time.sleep (1)
-        continue
-    l = d4_record_line.decode('utf-8')
-    rdns = process_format_passivedns(line=l.strip())
-    logger.debug("parsed record: {}".format(rdns))
-    if rdns is False:
-        logger.debug('Parsing of passive DNS line failed: {}'.format(l.strip()))
-        continue
-    if 'q' not in rdns:
-        logger.debug('Parsing of passive DNS line is incomplete: {}'.format(l.strip()))
-        continue
-    if rdns['q'] and rdns['type']:
-        excludeflag = False
-        for exclude in excludesubstrings:
-            if exclude in rdns['q']:
-               excludeflag = True
-        if excludeflag:
-            logger.debug('Excluded {}'.format(rdns['q']))
+try:
+    while True:
+        expiration = None
+        d4_record_line = r_d4.rpop(myqueue)
+        if d4_record_line is None:
+            time.sleep(1)
             continue
-        for y in expirations:
-            if y[0] == rdns['type']:
-                expiration=y[1]
-        if rdns['type'] == '16':
-            rdns['v'] = rdns['v'].replace("\"", "", 1)
-        query = "r:{}:{}".format(rdns['q'],rdns['type'])
-        logger.debug('redis sadd: {} -> {}'.format(query,rdns['v']))
-        r.sadd(query, rdns['v'])
-        if expiration:
-            logger.debug("Expiration {} {}".format(expiration, query))
-            r.expire(query, expiration)
-        res = "v:{}:{}".format(rdns['v'], rdns['type'])
-        logger.debug('redis sadd: {} -> {}'.format(res,rdns['q']))
-        r.sadd(res, rdns['q'])
-        if expiration:
-            logger.debug("Expiration {} {}".format(expiration, query))
-            r.expire(res, expiration)
+        l = d4_record_line.decode('utf-8')
+        rdns = process_format_passivedns(line=l.strip())
+        logger.debug("parsed record: {}".format(rdns))
+        if rdns is False:
+            logger.debug('Parsing of passive DNS line failed: {}'.format(l.strip()))
+            continue
+        if 'q' not in rdns:
+            logger.debug('Parsing of passive DNS line is incomplete: {}'.format(l.strip()))
+            continue
+        if rdns['q'] and rdns['type']:
+            excludeflag = False
+            for exclude in excludesubstrings:
+                if exclude in rdns['q']:
+                    excludeflag = True
+            if excludeflag:
+                logger.debug('Excluded {}'.format(rdns['q']))
+                continue
+            for y in expirations:
+                if y[0] == rdns['type']:
+                    expiration = y[1]
+            if rdns['type'] == '16':
+                rdns['v'] = rdns['v'].replace("\"", "", 1)
+            query = "r:{}:{}".format(rdns['q'], rdns['type'])
+            logger.debug('redis sadd: {} -> {}'.format(query, rdns['v']))
+            r.sadd(query, rdns['v'])
+            if expiration:
+                logger.debug("Expiration {} {}".format(expiration, query))
+                r.expire(query, expiration)
+            res = "v:{}:{}".format(rdns['v'], rdns['type'])
+            logger.debug('redis sadd: {} -> {}'.format(res, rdns['q']))
+            r.sadd(res, rdns['q'])
+            if expiration:
+                logger.debug("Expiration {} {}".format(expiration, query))
+                r.expire(res, expiration)
 
-        firstseen = "s:{}:{}:{}".format(rdns['q'], rdns['v'], rdns['type'])
-        if not r.exists(firstseen):
-            r.set(firstseen, rdns['timestamp'])
-            logger.debug('redis set: {} -> {}'.format(firstseen, rdns['timestamp']))
+            firstseen = "s:{}:{}:{}".format(rdns['q'], rdns['v'], rdns['type'])
+            if not r.exists(firstseen):
+                r.set(firstseen, rdns['timestamp'])
+                logger.debug('redis set: {} -> {}'.format(firstseen, rdns['timestamp']))
 
-        if expiration:
-            logger.debug("Expiration {} {}".format(expiration, query))
-            r.expire(firstseen, expiration)
+            if expiration:
+                logger.debug("Expiration {} {}".format(expiration, query))
+                r.expire(firstseen, expiration)
 
-        lastseen = "l:{}:{}:{}".format(rdns['q'], rdns['v'], rdns['type'])
-        last = r.get(lastseen)
-        if last is None or int(last) < int(rdns['timestamp']):
-            r.set(lastseen, rdns['timestamp'])
-            logger.debug('redis set: {} -> {}'.format(lastseen, rdns['timestamp']))
-        if expiration:
-            logger.debug("Expiration {} {}".format(expiration, query))
-            r.expire(query, expiration)
+            lastseen = "l:{}:{}:{}".format(rdns['q'], rdns['v'], rdns['type'])
+            last = r.get(lastseen)
+            if last is None or int(last) < int(rdns['timestamp']):
+                r.set(lastseen, rdns['timestamp'])
+                logger.debug('redis set: {} -> {}'.format(lastseen, rdns['timestamp']))
+            if expiration:
+                logger.debug("Expiration {} {}".format(expiration, query))
+                r.expire(query, expiration)
 
-        occ = "o:{}:{}:{}".format(rdns['q'], rdns['v'], rdns['type'])
-        r.incr(occ, amount=1)
-        if expiration:
-            logger.debug("Expiration {} {}".format(expiration, query))
-            r.expire(occ, expiration)
+            occ = "o:{}:{}:{}".format(rdns['q'], rdns['v'], rdns['type'])
+            r.incr(occ, amount=1)
+            if expiration:
+                logger.debug("Expiration {} {}".format(expiration, query))
+                r.expire(occ, expiration)
 
-
-
-        # TTL, Class, DNS Type distribution stats
-        if 'ttl' in rdns:
-            r.hincrby('dist:ttl', rdns['ttl'], amount=1)
-        if 'class' in rdns:
-            r.hincrby('dist:class', rdns['class'], amount=1)
-        if 'type' in rdns:
-            r.hincrby('dist:type', rdns['type'], amount=1)
-        if stats:
-            r.incrby('stats:processed', amount=1)
-    if not rdns:
-        logger.info('empty passive dns record')
-        continue
+            # TTL, Class, DNS Type distribution stats
+            if 'ttl' in rdns:
+                r.hincrby('dist:ttl', rdns['ttl'], amount=1)
+            if 'class' in rdns:
+                r.hincrby('dist:class', rdns['class'], amount=1)
+            if 'type' in rdns:
+                r.hincrby('dist:type', rdns['type'], amount=1)
+            if stats:
+                r.incrby('stats:processed', amount=1)
+        if not rdns:
+            logger.info('empty passive dns record')
+            continue
+except KeyboardInterrupt:
+    logger.info("Shutting down gracefully")
+    exit(0)
