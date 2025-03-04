@@ -156,7 +156,7 @@ def add_record(rdns=None):
             r.incrby('stats:processed', amount=1)
             r.sadd('sensors:seen', rdns["sensor_id"])
             r.zincrby('stats:sensors', 1, rdns["sensor_id"])
-    if not r:
+    if not rdns:
         logger.info('empty passive dns record')
         return False
 
