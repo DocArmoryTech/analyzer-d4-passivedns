@@ -24,7 +24,6 @@ logger = setup_logger('pdns_ingestor', config)
 logger.info("Starting Passive DNS array import")
 
 r = init_redis('D4_ANALYZER_REDIS_HOST', 'D4_ANALYZER_REDIS_PORT')
-r_d4 = init_redis('D4_REDIS_METADATA_HOST', 'D4_REDIS_METADATA_PORT')
 rtype_path = os.path.join(os.path.dirname(__file__), '..', 'etc', 'records-type.json')
 dnstype = load_dns_types(rtype_path)
 excludesubstrings = config.get('exclude', 'substring', fallback='spamhaus.org,asn.cymru.com').split(',')

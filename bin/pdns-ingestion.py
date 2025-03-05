@@ -14,6 +14,7 @@
 # Copyright (c) Computer Incident Response Center Luxembourg (CIRCL)
 
 import time
+import redis
 from common import setup_logger, load_config, init_redis, load_dns_types, process_record
 
 config_path = os.path.join(os.path.dirname(__file__), '..', 'etc', 'analyzer.conf')
@@ -24,7 +25,15 @@ logger.info("Starting Passive DNS ingestion")
 myuuid = config.get('global', 'my-uuid', fallback='unknown')
 myqueue = f"analyzer:8:{myuuid}"
 r = init_redis('D4_ANALYZER_REDIS_HOST', 'D4_ANALYZER_REDIS_PORT')
-r_d4 = init_redis('D4_REDIS_METADATA_HOST', 'D4_REDIS_METADATA_PORT')
+d4_server, d4_port = config.get('global', 'd4-server').split(':')
+host_redis_metadata = os.getenv('D4_REDIS_METADATA_HOST', d4_server)
+port_redis_metadata = int(os.getenv('D4_REDIS_METADATA_PORT', d4_port))
+r_d4 = redis.Redis(host=host_redis_metadata, port=port_redis_metadata, db=2)
+try:
+    r_d4.ping()
+except redis.ConnectionError as e:
+    logger.critical(f"Failed to connect to metadata Redis: {e}")
+    sys.exit(1)
 rtype_path = os.path.join(os.path.dirname(__file__), '..', 'etc', 'records-type.json')
 dnstype = load_dns_types(rtype_path)
 excludesubstrings = config.get('exclude', 'substring', fallback='spamhaus.org,asn.cymru.com').split(',')
