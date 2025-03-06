@@ -30,8 +30,7 @@ def main():
 
     load_config()
     logger.info("Starting Passive DNS array import")
-    r = get_redis('analyzer')
-    r_d4 = get_redis('metadata')
+    r = get_redis()
     dnstype = load_dns_types()
     excludesubstrings = get_config('exclude', 'substrings')
     expirations = get_config('expiration')

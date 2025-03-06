@@ -1,0 +1,23 @@
+{
+  "_notes": {
+    "exclude.substrings": "List of domain substrings to exclude from ingestion/import (e.g., ['spamhaus.org']). Default: ['spamhaus.org', 'asn.cymru.com'].",
+    "expiration": "Expiration times (in seconds) for DNS records by numeric type. Keys are DNS type numbers as strings.",
+    "expiration.16": "Expiration time for TXT records (type 16), e.g., 24000 seconds (~6.67 hours).",
+    "expiration.99": "Expiration time for SPF records (type 99), e.g., 26000 seconds (~7.22 hours).",
+    "redis": "Redis connection settings using Unix sockets for analyzer.",
+    "redis.analyzer": "Settings for the Redis instance storing processed DNS data.",
+    "redis.analyzer.socket_path": "Path to the Unix socket for analyzer Redis (e.g., './cache/analyzer.sock'). Required.",
+},
+  "exclude": {
+    "substrings": ["spamhaus.org", "asn.cymru.com"]
+  },
+  "expiration": {
+    "16": 24000,
+    "99": 26000
+  },
+  "redis": {
+    "analyzer": {
+      "socket_path": "./cache/analyzer.sock"
+    }
+  }
+}

@@ -37,7 +37,7 @@ def main():
 
     load_config()
     logger.info("Starting Passive DNS stream import")
-    r = get_redis('analyzer')
+    r = get_redis()
     dnstype = load_dns_types()
     excludesubstrings = get_config('exclude', 'substrings')
     expirations = get_config('expiration')

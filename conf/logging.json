@@ -1,0 +1,32 @@
+{
+    "version": 1,
+    "disable_existing_loggers": false,
+    "formatters": {
+      "verbose": {
+        "format": "%(levelname)s %(asctime)s %(name)s %(module)s:%(lineno)s %(message)s"
+      }
+    },
+    "handlers": {
+      "console": {
+        "level": "INFO",
+        "class": "logging.StreamHandler",
+        "formatter": "verbose",
+        "stream": "ext://sys.stdout"
+      },
+      "file": {
+        "level": "DEBUG",
+        "class": "logging.handlers.RotatingFileHandler",
+        "formatter": "verbose",
+        "filename": "d4pdns.log",
+        "maxBytes": 10485760,
+        "backupCount": 5
+      }
+    },
+    "loggers": {
+      "d4pdn": {
+        "level": "INFO",
+        "handlers": ["console", "file"],
+        "propagate": false
+      }
+    }
+  }

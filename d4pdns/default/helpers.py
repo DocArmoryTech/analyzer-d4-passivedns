@@ -7,7 +7,6 @@ import sys
 
 # Global caches
 redis_analyzer = None
-redis_metadata = None
 _logger = None
 
 def get_homedir() -> Path:
@@ -68,13 +67,11 @@ def get_socket_path(section: str) -> str:
         sys.exit(1)
     return full_path
 
-def get_redis(section: str = 'analyzer') -> redis.Redis:
+def get_redis() -> redis.Redis:
     from .exceptions import RedisConnectionError
-    global redis_analyzer, redis_metadata
-    if section == 'analyzer' and redis_analyzer is not None:
+    global redis_analyzer
+    if redis_analyzer is not None:
         return redis_analyzer
-    if section == 'metadata' and redis_metadata is not None:
-        return redis_metadata
     socket_path = get_socket_path(section)
     db = get_config('redis', section).get('db', 0)
     try:
@@ -84,10 +81,7 @@ def get_redis(section: str = 'analyzer') -> redis.Redis:
         logger = load_logging_config()
         logger.critical(f"Failed to connect to Redis ({section}) at {socket_path}: {e}")
         raise RedisConnectionError(f"Redis ({section}) connection failed: {e}")
-    if section == 'analyzer':
-        redis_analyzer = conn
-    elif section == 'metadata':
-        redis_metadata = conn
+    redis_analyzer = conn
     return conn
 
 def normalize_domain(domain: str) -> str:

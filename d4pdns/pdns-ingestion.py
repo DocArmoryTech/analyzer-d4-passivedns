@@ -104,15 +104,49 @@ def process_record(r: 'redis.Redis', rdns: dict, dnstype: dict, excludesubstring
     return True
 
 def main():
+  
+    parser = argparse.ArgumentParser(description="Passive DNS ingestion script")
+    parser.add_argument("--redis", dest="redis", help="Redis server (format: ip:port or socket path)")
+    parser.add_argument("--myuuid", dest="myuuid", help="Unique identifier for this instance")
+    args = parser.parse_args()
+    
     load_config()  # Ensure config is loaded
     logger.info("Starting Passive DNS ingestion")
-    myuuid = get_config('my-uuid')
-    if not myuuid:
-        logger.critical("Missing 'my-uuid' in config")
-        sys.exit(1)
+
+    myuuid = args.myuuid
     myqueue = f"analyzer:8:{myuuid}"
-    r = get_redis('analyzer')
-    r_d4 = get_redis('metadata')
+
+    
+    redis_params = {}
+    if args.redis:
+      if ":" in args.redis:
+          parts = args.redis.split(":")
+          if len(parts) != 2 or not parts[1].isdigit():
+            raise ValueError("Invalid format for --redis. Expected ip:port or a valid socket path.")
+          else:
+            redis_params["host"] = parts[0]
+          redis_params["port"] = int(parts[1])
+      else:
+          redis_params["unix_socket_path"] = args.redis
+    else:
+       redis_params["host"] = os.getenv('D4_REDIS_METADATA_HOST', '127.0.0.1')
+       redis_params["port"] = int(os.getenv('D4_REDIS_METADATA_PORT', '6380'))
+    
+    redis_params["db"] = 2
+    try:
+        r_d4 = redis.Redis(**redis_params)
+    except ValueError as e:
+        logger.critical(str(e))
+        sys.exit(1)
+
+    # Resolve UUID
+    myuuid = args.myuuid or os.getenv('D4_UUID')
+    if not myuuid or not re.match(r"^[a-f0-9\-]{36}$", myuuid):
+        logger.critical("Invalid or missing UUID")
+        sys.exit(1)
+
+    myqueue = f"analyzer:8:{myuuid}"
+    r = get_redis()
     dnstype = load_dns_types()
     excludesubstrings = get_config('exclude', 'substrings')
     expirations = get_config('expiration')
@@ -122,6 +156,7 @@ def main():
         if d4_record_line is None:
             time.sleep(1)
             continue
+        
         l = d4_record_line.strip()
         try:
             rdns = process_format_passivedns(line=l.strip())
@@ -131,5 +166,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    
