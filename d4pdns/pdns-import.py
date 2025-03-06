@@ -12,7 +12,7 @@
 
 import argparse
 import sys
-from common import setup_logger, load_config, init_redis, load_dns_types, process_record
+from .default.helpers import setup_logger, load_config, init_redis, load_dns_types, process_record
 
 parser = argparse.ArgumentParser(description='Import array of standard Passive DNS cof format into your Passive DNS server')
 parser.add_argument('--file', dest='filetoimport', help='JSON file to import')

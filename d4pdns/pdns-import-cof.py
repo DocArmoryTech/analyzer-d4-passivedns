@@ -15,7 +15,7 @@ import sys
 import json
 import ndjson
 import websocket
-from common import setup_logger, load_config, init_redis, load_dns_types, process_record
+from .default.helpers import setup_logger, load_config, init_redis, load_dns_types, process_record
 parser = argparse.ArgumentParser(
     description='Import array of standard Passive DNS cof format into your Passive DNS server'
 )

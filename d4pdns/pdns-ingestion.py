@@ -15,7 +15,7 @@
 
 import time
 import redis
-from common import setup_logger, load_config, init_redis, load_dns_types, process_record
+from .default.helpers import setup_logger, load_config, init_redis, load_dns_types, process_record
 
 config_path = os.path.join(os.path.dirname(__file__), '..', 'etc', 'analyzer.conf')
 config = load_config(config_path)
