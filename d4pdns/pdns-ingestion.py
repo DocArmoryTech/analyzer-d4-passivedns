@@ -14,31 +14,11 @@
 # Copyright (c) Computer Incident Response Center Luxembourg (CIRCL)
 
 import time
-import redis
-from .default.helpers import setup_logger, load_config, init_redis, load_dns_types, process_record
+import sys
+from .default import load_config, get_config, get_redis, load_dns_types, load_logging_config, normalize_domain
+from .default.exceptions import DNSParseError
 
-config_path = os.path.join(os.path.dirname(__file__), '..', 'etc', 'analyzer.conf')
-config = load_config(config_path)
-logger = setup_logger('pdns_ingestor', config)
-logger.info("Starting Passive DNS ingestion")
-
-myuuid = config.get('global', 'my-uuid', fallback='unknown')
-myqueue = f"analyzer:8:{myuuid}"
-r = init_redis('D4_ANALYZER_REDIS_HOST', 'D4_ANALYZER_REDIS_PORT')
-d4_server, d4_port = config.get('global', 'd4-server').split(':')
-host_redis_metadata = os.getenv('D4_REDIS_METADATA_HOST', d4_server)
-port_redis_metadata = int(os.getenv('D4_REDIS_METADATA_PORT', d4_port))
-r_d4 = redis.Redis(host=host_redis_metadata, port=port_redis_metadata, db=2)
-try:
-    r_d4.ping()
-except redis.ConnectionError as e:
-    logger.critical(f"Failed to connect to metadata Redis: {e}")
-    sys.exit(1)
-rtype_path = os.path.join(os.path.dirname(__file__), '..', 'etc', 'records-type.json')
-dnstype = load_dns_types(rtype_path)
-excludesubstrings = config.get('exclude', 'substring', fallback='spamhaus.org,asn.cymru.com').split(',')
-expirations = config.items('expiration')
-
+logger = load_logging_config()
 def process_format_passivedns(line=None):
     # log line example
     # timestamp||ip-src||ip-dst||class||q||type||v||ttl||count
@@ -63,11 +43,93 @@ def process_format_passivedns(line=None):
         i = i + 1
     return record
 
-while True:
-    d4_record_line = r_d4.rpop(myqueue)
-    if d4_record_line is None:
-        time.sleep(1)
-        continue
-    l = d4_record_line.decode('utf-8').strip()
-    rdns = process_format_passivedns(line=l.strip())
-    process_record(r, rdns, dnstype, excludesubstrings, expirations)
+def process_record(r: 'redis.Redis', rdns: dict, dnstype: dict, excludesubstrings: list, expirations: dict, stats: bool = True) -> bool:
+    if not rdns or 'rrname' not in rdns:
+        logger.debug(f"Parsing of passive DNS line is incomplete: {rdns}")
+        return False
+    if not rdns['rrname'] or not rdns['rrtype']:
+        return False
+    if rdns['rrtype'] not in dnstype:
+        logger.debug(f"Unknown DNS type '{rdns['rrtype']}' in record: {rdns}")
+        return False
+    rdns['type'] = dnstype[rdns['rrtype']]
+    rdns['v'] = rdns['rdata']
+    for exclude in excludesubstrings:
+        if exclude in rdns['rrname']:
+            logger.debug(f"Excluded {rdns['rrname']}")
+            return False
+    expiration = expirations.get(rdns['type'])
+    if expiration is not None:
+        expiration = int(expiration)
+    if rdns['type'] == '16':
+        rdns['v'] = rdns['v'].replace("\"", "", 1)
+    query = f"r:{rdns['rrname']}:{rdns['type']}"
+    r.sadd(query, rdns['v'])
+    if expiration:
+        r.expire(query, expiration)
+    res = f"v:{rdns['v']}:{rdns['type']}"
+    r.sadd(res, rdns['rrname'])
+    if expiration:
+        r.expire(res, expiration)
+    firstseen = f"s:{rdns['rrname']}:{rdns['v']}:{rdns['type']}"
+    try:
+        firstseen_val = int(float(rdns['time_first']))
+        if not r.exists(firstseen):
+            r.set(firstseen, firstseen_val)
+        if expiration:
+            r.expire(firstseen, expiration)
+    except (ValueError, TypeError, KeyError) as e:
+        logger.debug(f"Invalid or missing time_first in record: {rdns}")
+        raise DNSParseError(f"Failed to parse time_first: {e}")
+    lastseen = f"l:{rdns['rrname']}:{rdns['v']}:{rdns['type']}"
+    try:
+        lastseen_val = int(float(rdns['time_last']))
+        last = r.get(lastseen)
+        if last is None or int(float(last)) < lastseen_val:
+            r.set(lastseen, lastseen_val)
+        if expiration:
+            r.expire(lastseen, expiration)
+    except (ValueError, TypeError, KeyError) as e:
+        logger.debug(f"Invalid or missing time_last in record: {rdns}")
+        raise DNSParseError(f"Failed to parse time_last: {e}")
+    occ = f"o:{rdns['rrname']}:{rdns['v']}:{rdns['type']}"
+    r.incrby(occ, int(rdns.get('count', 1)))
+    if expiration:
+        r.expire(occ, expiration)
+    if stats:
+        r.incrby('stats:processed', 1)
+        if 'sensor_id' in rdns:
+            r.sadd('sensors:seen', rdns['sensor_id'])
+            r.zincrby('stats:sensors', 1, rdns['sensor_id'])
+    return True
+
+def main():
+    load_config()  # Ensure config is loaded
+    logger.info("Starting Passive DNS ingestion")
+    myuuid = get_config('my-uuid')
+    if not myuuid:
+        logger.critical("Missing 'my-uuid' in config")
+        sys.exit(1)
+    myqueue = f"analyzer:8:{myuuid}"
+    r = get_redis('analyzer')
+    r_d4 = get_redis('metadata')
+    dnstype = load_dns_types()
+    excludesubstrings = get_config('exclude', 'substrings')
+    expirations = get_config('expiration')
+
+    while True:
+        d4_record_line = r_d4.rpop(myqueue)
+        if d4_record_line is None:
+            time.sleep(1)
+            continue
+        l = d4_record_line.strip()
+        try:
+            rdns = process_format_passivedns(line=l.strip())
+            process_record(r, rdns, dnstype, excludesubstrings, expirations)
+        except (IndexError, DNSParseError) as e:
+            logger.debug(f"Failed to parse record: {l} - {e}")
+
+if __name__ == "__main__":
+    main()
+
+    

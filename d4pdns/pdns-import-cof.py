@@ -15,73 +15,78 @@ import sys
 import json
 import ndjson
 import websocket
-from .default.helpers import setup_logger, load_config, init_redis, load_dns_types, process_record
-parser = argparse.ArgumentParser(
-    description='Import array of standard Passive DNS cof format into your Passive DNS server'
-)
-parser.add_argument('--file', dest='filetoimport', help='JSON file to import')
-parser.add_argument(
-    '--websocket', dest='websocket', help='Import from a websocket stream'
-)
-args = parser.parse_args()
+import os
+from .default import load_config, get_config, get_redis, load_dns_types, load_logging_config, normalize_domain
+from .pdns_ingestion import process_record
+from .default.exceptions import DNSParseError
 
-if args.filetoimport and args.websocket:
-    logger = setup_logger('pdns_ingestor')
-    logger.critical("Cannot specify both --file and --websocket")
-    sys.exit(1)
-if not args.filetoimport and not args.websocket:
-    parser.print_help()
-    sys.exit(0)
+logger = load_logging_config()
 
-config_path = os.path.join(os.path.dirname(__file__), '..', 'etc', 'analyzer.conf')
-config = load_config(config_path)
-logger = setup_logger('pdns_ingestor', config)
-logger.info("Starting COF ingestor")
+def main():
+    parser = argparse.ArgumentParser(description='Import Passive DNS COF format from NDJSON or WebSocket')
+    parser.add_argument('--file', dest='filetoimport', help='NDJSON file to import')
+    parser.add_argument('--websocket', dest='websocket', help='WebSocket stream URL')
+    args = parser.parse_args()
 
-r = init_redis('D4_ANALYZER_REDIS_HOST', 'D4_ANALYZER_REDIS_PORT')
-rtype_path = os.path.join(os.path.dirname(__file__), '..', 'etc', 'records-type.json')
-dnstype = load_dns_types(rtype_path)
-excludesubstrings = config.get('exclude', 'substring', fallback='spamhaus.org,asn.cymru.com').split(',')
-expirations = config.items('expiration')
-
-def on_open(ws):
-    logger.debug('[websocket] connection open')
-
-
-def on_close(ws):
-    logger.debug('[websocket] connection closed')
-
-
-def on_message(ws, message):
-    logger.debug('Message received via websocket')
-    try:
-        rdns = json.loads(message)
-        process_record(r, rdns, dnstype, excludesubstrings, expirations)
-    except json.JSONDecodeError as e:
-        logger.debug(f"Invalid JSON in websocket message: {e}")
-
-def on_error(ws, error):
-    logger.error(f"Websocket error: {error}")
-    
-if args.filetoimport:
-    if not os.path.exists(args.filetoimport):
-        logger.critical(f"Input file not found: {args.filetoimport}")
+    if args.filetoimport and args.websocket:
+        logger.critical("Cannot specify both --file and --websocket")
         sys.exit(1)
-    try:
-        with open(args.filetoimport, "r") as dnsimport:
-            reader = ndjson.load(dnsimport)
-            for rdns in reader:
-                process_record(r, rdns, dnstype, excludesubstrings, expirations)
-    except json.JSONDecodeError as e:
-        logger.critical(f"Invalid NDJSON in file {args.filetoimport}: {e}")
-        sys.exit(1)
-elif args.websocket:
-    ws = websocket.WebSocketApp(
-        args.websocket, on_open=on_open, on_close=on_close, on_message=on_message, on_error=on_error
-    )
-    try:
-        ws.run_forever()
-    except KeyboardInterrupt:
-        logger.info("Shutting down websocket gracefully")
-        ws.close()
+    if not args.filetoimport and not args.websocket:
+        parser.print_help()
         sys.exit(0)
+
+    load_config()
+    logger.info("Starting Passive DNS stream import")
+    r = get_redis('analyzer')
+    dnstype = load_dns_types()
+    excludesubstrings = get_config('exclude', 'substrings')
+    expirations = get_config('expiration')
+
+    def on_open(ws):
+        logger.debug('[websocket] connection open')
+
+    def on_close(ws):
+        logger.debug('[websocket] connection closed')
+
+    def on_message(ws, message):
+        logger.debug('Message received via websocket')
+        try:
+            rdns = json.loads(message)
+            rdns['rrname'] = normalize_domain(rdns['rrname'])
+            rdns['rdata'] = normalize_domain(rdns['rdata'])
+            process_record(r, rdns, dnstype, excludesubstrings, expirations)
+        except (json.JSONDecodeError, DNSParseError) as e:
+            logger.debug(f"Invalid JSON or parsing error in websocket message: {e}")
+
+    def on_error(ws, error):
+        logger.error(f"Websocket error: {error}")
+
+    if args.filetoimport:
+        if not os.path.exists(args.filetoimport):
+            logger.critical(f"Input file not found: {args.filetoimport}")
+            sys.exit(1)
+        try:
+            with open(args.filetoimport, "r") as dnsimport:
+                reader = ndjson.load(dnsimport)
+                for rdns in reader:
+                    rdns['rrname'] = normalize_domain(rdns['rrname'])
+                    rdns['rdata'] = normalize_domain(rdns['rdata'])
+                    process_record(r, rdns, dnstype, excludesubstrings, expirations)
+        except json.JSONDecodeError as e:
+            logger.critical(f"Invalid NDJSON in file {args.filetoimport}: {e}")
+            sys.exit(1)
+        except DNSParseError as e:
+            logger.debug(f"Failed to process NDJSON record: {e}")
+    elif args.websocket:
+        ws = websocket.WebSocketApp(
+            args.websocket, on_open=on_open, on_close=on_close, on_message=on_message, on_error=on_error
+        )
+        try:
+            ws.run_forever()
+        except KeyboardInterrupt:
+            logger.info("Shutting down websocket gracefully")
+            ws.close()
+            sys.exit(0)
+
+if __name__ == "__main__":
+    main()
