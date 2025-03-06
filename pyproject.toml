@@ -16,6 +16,10 @@ dependencies = [
     "websocket-client (>=1.8.0,<2.0.0)"
 ]
 
+[project.scripts]
+pdns-import = "d4pdns.pdns-import:main"
+pdns-import-cof = "d4pdns.pdns-import-cof:main"
+pdns-ingestion = "d4pdns.pdns-ingestion:main"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
