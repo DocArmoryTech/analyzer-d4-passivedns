@@ -1,18 +1,26 @@
-env_global_name = "D4_PDNS"
+env_global_name = "D4PDNS_HOME"
 
 from .helpers import (
-    get_homedir, get_config_dir, get_config_file, load_config, get_config,
-    load_logging_config, get_socket_path, get_redis, normalize_domain
+    get_homedir, load_configs, get_config, safe_create_dir, 
+    get_redis, try_make_file, load_logging_config, normalize_domain
 )
+
 from .exceptions import RedisConnectionError, InvalidConfigError, DNSParseError
 from .dns_types import load_dns_types
 
 os.chdir(get_homedir())
 
 __all__ = [
-    'setup_logger',
-    'load_config',
-    'init_redis',
-    'load_dns_types',
-    'process_record'
+    'RedisConnectionError',
+    'InvalidConfigError',
+    'DNSParseError',
+    'get_homedir',
+    'load_configs',
+    'get_config',
+    'safe_create_dir',
+    'get_redis',
+    'try_make_file',
+    'normalize_domain',
+    'load_logging_config'
+    'load_dns_types'
 ]

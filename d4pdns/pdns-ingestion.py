@@ -15,10 +15,11 @@
 
 import time
 import sys
-from .default import load_config, get_config, get_redis, load_dns_types, load_logging_config, normalize_domain
+from .default.helpers import load_config, get_config, get_redis, load_dns_types, load_logging_config, normalize_domain
 from .default.exceptions import DNSParseError
 
 logger = load_logging_config()
+
 def process_format_passivedns(line=None):
     # log line example
     # timestamp||ip-src||ip-dst||class||q||type||v||ttl||count
