@@ -1,0 +1,22 @@
+[project]
+name = "analyzer-d4-passivedns"
+version = "0.5.1"
+description = "analyzer-d4-passivedns is an analyzer for a D4 network sensor including a complete Passive DNS server. The analyser can process data produced by D4 sensors (in passivedns CSV format (more to come)) or independently from D4 using COF websocket streams."
+authors = [
+    {name = "D4 Project",email = "info@circl.lu"}
+]
+license = {text = "AGPL-3.0"}
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "redis (>=5.2.1,<6.0.0)",
+    "iptools (>=0.7.0,<0.8.0)",
+    "tornado (>=6.4.2,<7.0.0)",
+    "ndjson (>=0.3.1,<0.4.0)",
+    "websocket-client (>=1.8.0,<2.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
