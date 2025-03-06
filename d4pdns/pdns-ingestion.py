@@ -15,10 +15,11 @@
 
 import time
 import sys
-from .default import load_config, get_config, get_redis, load_dns_types, load_logging_config, normalize_domain
+from .default.helpers import load_config, get_config, get_redis, load_dns_types, load_logging_config, normalize_domain
 from .default.exceptions import DNSParseError
 
 logger = load_logging_config()
+
 def process_format_passivedns(line=None):
     # log line example
     # timestamp||ip-src||ip-dst||class||q||type||v||ttl||count
@@ -151,18 +152,22 @@ def main():
     excludesubstrings = get_config('exclude', 'substrings')
     expirations = get_config('expiration')
 
-    while True:
-        d4_record_line = r_d4.rpop(myqueue)
-        if d4_record_line is None:
-            time.sleep(1)
-            continue
-        
-        l = d4_record_line.strip()
-        try:
-            rdns = process_format_passivedns(line=l.strip())
-            process_record(r, rdns, dnstype, excludesubstrings, expirations)
-        except (IndexError, DNSParseError) as e:
-            logger.debug(f"Failed to parse record: {l} - {e}")
+    try: 
+        while True:
+            d4_record_line = r_d4.rpop(myqueue)
+            if d4_record_line is None:
+                time.sleep(1)
+                continue
+            
+            l = d4_record_line.strip()
+            try:
+                rdns = process_format_passivedns(line=l.strip())
+                process_record(r, rdns, dnstype, excludesubstrings, expirations)
+            except (IndexError, DNSParseError) as e:
+                logger.debug(f"Failed to parse record: {l} - {e}")
+    except KeyboardInterrupt:
+        logger.info("Shutting down ingestion gracefully")
+        sys.exit(0)
 
 if __name__ == "__main__":
     main()
