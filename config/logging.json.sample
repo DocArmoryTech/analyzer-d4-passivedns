@@ -23,7 +23,7 @@
       }
     },
     "loggers": {
-      "d4pdn": {
+      "pdns": {
         "level": "INFO",
         "handlers": ["console", "file"],
         "propagate": false
