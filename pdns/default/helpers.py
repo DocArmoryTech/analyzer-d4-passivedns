@@ -88,23 +88,6 @@ def get_config(config_type: str, entry: str | None=None, quiet: bool=False) -> A
         return sample_config[entry]
     return sample_config
 
-def load_logging_config() -> logging.Logger:
-    global _logger
-    if _logger is None:
-        logging_conf = get_config_file('logging')
-        if not logging_conf.exists():
-            # Fallback to basic config if logging.json is missing
-            logging.basicConfig(level=logging.INFO)
-        else:
-            try:
-                with logging_conf.open() as f:
-                    logging.config.dictConfig(json.load(f))
-            except (json.JSONDecodeError, ValueError) as e:
-                logging.basicConfig(level=logging.INFO)
-                logging.getLogger('d4_pdns').critical(f"Invalid logging config {logging_conf}: {e}")
-        _logger = logging.getLogger('d4_pdns')
-    return _logger
-
 def get_redis() -> redis.Redis:
     from .exceptions import RedisConnectionError
     global redis_analyzer

@@ -1,4 +1,4 @@
-env_global_name = "D4PDNS_HOME"
+env_global_name = "PDNS_HOME"
 
 from .helpers import (
     get_homedir, load_configs, get_config, safe_create_dir, 

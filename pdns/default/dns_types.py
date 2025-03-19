@@ -1,7 +1,7 @@
 from pathlib import Path
 import json
-from .helpers import load_logging_config
 
+###todo logging redo
 def load_dns_types() -> dict:
     logger = load_logging_config()
     rtype_path = Path(__file__).parent.parent.parent / 'config' / 'records-type.json'
