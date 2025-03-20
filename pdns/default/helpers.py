@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -98,11 +97,4 @@ def get_redis() -> redis.Redis:
         conn = redis.Redis(unix_socket_path=socket_path, db=0, decode_responses=True)
         conn.ping()
     except redis.ConnectionError as e:
-        logger = load_logging_config()
-        logger.critical(f"Failed to connect to Redis ({section}) at {socket_path}: {e}")
-        raise RedisConnectionError(f"Redis ({section}) connection failed: {e}")
-    redis_analyzer = conn
-    return conn
-
-def normalize_domain(domain: str) -> str:
-    return domain.strip('.').lower()
+        logger = load_logging_config()# Rate limiter setup

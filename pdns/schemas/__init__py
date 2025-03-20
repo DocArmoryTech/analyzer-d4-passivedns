@@ -1,0 +1,5 @@
+# pdns/schemas/__init__.py
+from .dns_record import DNSRecord
+from .api import Sensor, InfoResponse, MetadataResponse
+
+__all__ = ["DNSRecord", "Sensor", "InfoResponse", "MetadataResponse"]
