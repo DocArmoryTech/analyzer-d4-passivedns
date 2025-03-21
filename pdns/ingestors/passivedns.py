@@ -2,13 +2,13 @@
 import asyncio
 from ..default.helpers import logger
 from ..default.exceptions import DNSParseError
-from ..databases.base import Database
+from ..db.manager import DatabaseManager
 from ..schemas import DNSRecord
 from .base import Ingestor
 
 class PDNSIngestor(Ingestor):
-    def __init__(self, db: Database, file_path: str):
-        super().__init__(db)
+    def __init__(self, db_manager: DatabaseManager, file_path: str):
+        super().__init__(db_manager)
         self.file_path = file_path
 
     def parse_line(self, line: str) -> DNSRecord | None:
@@ -47,7 +47,7 @@ class PDNSIngestor(Ingestor):
                     try:
                         rdns = self.parse_line(l)
                         if rdns:
-                            await self.db.store_record(rdns)
+                            await self.db_manager.store_record(rdns)
                             logger.debug({"event": "ingest_record", "record": rdns.dict()})
                     except DNSParseError as e:
                         logger.debug({"event": "ingest_error", "error": str(e), "line": l})

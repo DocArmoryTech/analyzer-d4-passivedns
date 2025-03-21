@@ -2,14 +2,14 @@
 import asyncio
 import websockets
 from ..default.helpers import logger
-from ..db.base import Database
+from ..db.manager import DatabaseManager
 from ..schemas import DNSRecord
 from .base import Ingestor
 import json
 
 class WebSocketIngestor(Ingestor):
-    def __init__(self, db: Database, ws_url: str):
-        super().__init__(db)
+    def __init__(self, db_manager: DatabaseManager, ws_url: str):
+        super().__init__(db_manager)
         self.ws_url = ws_url
 
     async def ingest(self) -> None:
@@ -25,7 +25,7 @@ class WebSocketIngestor(Ingestor):
                         if "rdata" in data and isinstance(data["rdata"], str):
                             data["rdata"] = [data["rdata"]]
                         rdns = DNSRecord(**data)
-                        await self.db.store_record(rdns)  # Updated call
+                        await self.db_manager.store_record(rdns)
                         logger.debug({"event": "ingest_record", "record": rdns.dict()})
                     except (json.JSONDecodeError, ValueError) as e:
                         logger.debug({"event": "ingest_error", "error": str(e), "message": message})

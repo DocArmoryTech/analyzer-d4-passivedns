@@ -1,7 +1,7 @@
 # pdns/databases/redis.py
 import asyncio
 from typing import Optional, List, Tuple
-from ..databases.base import Database
+from ..db.base import Database
 from ..default.helpers import logger
 from ..schemas import DNSRecord
 import redis.asyncio as redis
@@ -14,35 +14,38 @@ class RedisDatabase(Database):
         self.host = host
         self.port = port
         self.db = db
-        self.client = None
+        self.pool = None
 
-    async def connect(self):
-        """Connect to Redis."""
-        if not self.client:
-            self.client = redis.Redis(
+    async def connect(self, pool_size: int = 10):
+        """Connect to Redis with a connection pool."""
+        if not self.pool:
+            self.pool = redis.ConnectionPool(
                 host=self.host,
                 port=self.port,
                 db=self.db,
+                max_connections=pool_size,
                 decode_responses=True
             )
+            self.client = redis.Redis(connection_pool=self.pool)
         return self.client
 
     async def disconnect(self):
-        """Disconnect from Redis."""
-        if self.client:
-            await self.client.close()
+        """Disconnect from Redis and close the pool."""
+        if self.pool:
+            await self.pool.disconnect()
+            self.pool = None
             self.client = None
 
-    async def _store_record_impl(self, record: DNSRecord) -> None:
-        """Implementation-specific method to store a DNS record in Redis."""
-        # Use numeric rrtype (e.g., "1" for A)
+    async def store_record(self, record: DNSRecord) -> None:
+        """Store a DNS record in Redis."""
+        if not self.client:
+            await self.connect()
         rrtype = record.rrtype if record.rrtype.isdigit() else str(next(v for k, v in rrset.items() if k == record.rrtype))
-        rdata = record.rdata[0]  # Assume single rdata for now
+        rdata = record.rdata[0]
         key = f"dns:{record.rrname}:{rrtype}:{rdata}"
         name_key = f"dnsname:{record.rrname}"
         data_key = f"dnsdata:{rdata}"
 
-        # Store record as JSON
         record_json = record.to_json()
         async with self.client.pipeline() as pipe:
             expiration = self.expirations.get(record.rrtype)
@@ -63,7 +66,8 @@ class RedisDatabase(Database):
         logger.debug({"event": "record_stored", "key": key})
 
     async def get_record(self, q: str, cursor: str, limit: int, rrtype: str = None) -> Tuple[List[dict], Optional[str], int]:
-        await self.connect()
+        if not self.client:
+            await self.connect()
         name_key = f"dnsname:{q}"
         members = await self.client.smembers(name_key)
         records = []
@@ -85,7 +89,8 @@ class RedisDatabase(Database):
         return records, next_cursor, total
 
     async def get_associated_records(self, q: str) -> List[str]:
-        await self.connect()
+        if not self.client:
+            await self.connect()
         if "." in q and not q.startswith("dns"):
             key = f"dnsdata:{q}"
             members = await self.client.smembers(key)
@@ -93,7 +98,8 @@ class RedisDatabase(Database):
         return [q]
 
     async def stream_records(self, q: str, chunk_size: int) -> str:
-        await self.connect()
+        if not self.client:
+            await self.connect()
         name_key = f"dnsname:{q}"
         members = await self.client.smembers(name_key)
         for i in range(0, len(members), chunk_size):
@@ -109,12 +115,14 @@ class RedisDatabase(Database):
             await asyncio.sleep(0)
 
     async def get_stats(self) -> dict:
-        await self.connect()
+        if not self.client:
+            await self.connect()
         stats = await self.client.hgetall("stat")
         return {k: int(v) for k, v in stats.items()}
 
     async def get_sensors(self) -> List[Tuple[str, int]]:
-        await self.connect()
+        if not self.client:
+            await self.connect()
         sensor_keys = await self.client.keys("sensor:*")
         sensors = []
         for key in sensor_keys:

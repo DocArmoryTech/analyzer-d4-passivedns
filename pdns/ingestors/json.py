@@ -1,14 +1,14 @@
 # pdns/ingestors/json_file.py
 import asyncio
 from ..default.helpers import logger
-from ..databases.base import Database
+from ..db.manager import DatabaseManager
 from ..schemas import DNSRecord
 from .base import Ingestor
 import json
 
 class JSONFileIngestor(Ingestor):
-    def __init__(self, db: Database, file_path: str):
-        super().__init__(db)
+    def __init__(self, db_manager: DatabaseManager, file_path: str):
+        super().__init__(db_manager)
         self.file_path = file_path
 
     async def ingest(self) -> None:
@@ -28,7 +28,7 @@ class JSONFileIngestor(Ingestor):
                         if "rdata" in item and isinstance(item["rdata"], str):
                             item["rdata"] = [item["rdata"]]
                         rdns = DNSRecord(**item)
-                        await self.db.store_record(rdns)
+                        await self.db_manager.store_record(rdns)
                         logger.debug({"event": "ingest_record", "record": rdns.dict()})
                     except (ValueError, TypeError) as e:
                         logger.debug({"event": "ingest_error", "error": str(e), "record": item})

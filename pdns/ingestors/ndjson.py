@@ -1,14 +1,14 @@
 # pdns/ingestors/ndjson_file.py
 import asyncio
 from ..default.helpers import logger
-from ..databases.base import Database
+from ..db.manager import DatabaseManager
 from ..schemas import DNSRecord
 from .base import Ingestor
 import json
 
 class NDJSONFileIngestor(Ingestor):
-    def __init__(self, db: Database, file_path: str):
-        super().__init__(db)
+    def __init__(self, db_manager: DatabaseManager, file_path: str):
+        super().__init__(db_manager)
         self.file_path = file_path
 
     async def ingest(self) -> None:
@@ -28,7 +28,7 @@ class NDJSONFileIngestor(Ingestor):
                         if "rdata" in data and isinstance(data["rdata"], str):
                             data["rdata"] = [data["rdata"]]
                         rdns = DNSRecord(**data)
-                        await self.db.store_record(rdns)
+                        await self.db_manager.store_record(rdns)
                         logger.debug({"event": "ingest_record", "record": rdns.dict()})
                     except (json.JSONDecodeError, ValueError) as e:
                         logger.debug({"event": "ingest_error", "error": str(e), "line": l})
