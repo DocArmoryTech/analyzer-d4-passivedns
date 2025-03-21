@@ -2,13 +2,12 @@
 from .default.helpers import get_config
 
 
-# Load rrset from config/records-type.json
-rrset = get_config("records-type")
+# Load rrset from config/rrtypes.json
+rrset = get_config("rrtypes")
 
 
 rrset_supported = set()
-# Load supported types from config/rtypes-supported.json
-for t in  get_config("rtypes-supported"):
+for t in  get_config("generic", "rrset_supported"):
     if t in rrset:  # If specified by name (e.g., "A")
         rrset_supported.add(rrset[t])
     elif t in rrset.values():  # If specified by value (e.g., "1")

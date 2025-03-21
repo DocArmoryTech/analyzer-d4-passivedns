@@ -1,57 +1,76 @@
 # pdns/databases/base.py
 from abc import ABC, abstractmethod
-from ..default.helpers import logger
-from ..default.exceptions import DNSParseError
+from ..default.helpers import get_config, logger
 from ..schemas import DNSRecord
-from typing import List, Optional, Tuple, AsyncGenerator, Any
+from ..notifiers.manager import NotificationManager
 
 class Database(ABC):
-    async def process_record(self, rdns: DNSRecord, excludesubstrings: List[str], expirations: dict) -> bool:
-        """Process a DNS record before storing it in the database."""
-        for exclude in excludesubstrings:
-            if exclude in rdns.rrname:
-                logger.debug(f"Excluded {rdns.rrname}")
-                return False
+    """Abstract base class for database implementations."""
+
+    def __init__(self):
+        # Load expirations
+        try:
+            self.expirations = get_config("expirations")
+            if not isinstance(self.expirations, dict):
+                raise ValueError("expirations config must be a dictionary")
+        except Exception as e:
+            logger.error(f"Failed to load expirations config: {str(e)}, using empty dict")
+            self.expirations = {}
         
-        expiration = expirations.get(rrset[rdns.rrtype])
-        if expiration is not None:
-            expiration = int(expiration)
-        
-        await self.store_record(rdns, expiration=expiration)
-        return True
+        # Load excludesubstrings
+        try:
+            self.excludesubstrings = get_config("generic", "excludesubstrings")
+            if not isinstance(self.excludesubstrings, list):
+                raise ValueError("excludesubstrings in generic config must be a list")
+        except Exception as e:
+            logger.error(f"Failed to load excludesubstrings config: {str(e)}, using empty list")
+            self.excludesubstrings = []
+
+        # Instantiate NotificationManager
+        self.notification_manager = NotificationManager()
+
+    def _is_excluded(self, record: DNSRecord) -> bool:
+        """Check if a record is excluded based on substring rules."""
+        if any(substr in record.rrname for substr in self.excludesubstrings):
+            logger.debug({"event": "record_excluded", "rrname": record.rrname})
+            return True
+        return False
 
     @abstractmethod
-    async def connect(self) -> Any:
+    async def connect(self):
         pass
 
     @abstractmethod
-    async def disconnect(self) -> None:
+    async def disconnect(self):
+        pass
+
+    async def store_record(self, record: DNSRecord) -> None:
+        """Store a DNS record in the database, checking exclusions and triggering alerts."""
+        if self._is_excluded(record):
+            return
+        await self.notification_manager.trigger(record)  # Trigger alerts
+        await self._store_record_impl(record)
+
+    @abstractmethod
+    async def _store_record_impl(self, record: DNSRecord) -> None:
         pass
 
     @abstractmethod
-    async def get_stats(self) -> int:
+    async def get_record(self, q: str, cursor: str, limit: int, rrtype: str = None) -> tuple[list[dict], str | None, int]:
         pass
 
     @abstractmethod
-    async def get_sensors(self) -> List[Tuple[str, float]]:
+    async def get_associated_records(self, q: str) -> list[str]:
         pass
 
     @abstractmethod
-    async def get_timestamps_and_count(self, t1: str, t2: str, rr_values: List[str]) -> Tuple[Optional[int], Optional[int], Optional[int]]:
+    async def stream_records(self, q: str, chunk_size: int) -> str:
         pass
 
     @abstractmethod
-    async def get_record(self, t: str, cursor: Optional[str], limit: int, rrtype: Optional[str]) -> Tuple[List[dict], Optional[str], int]:
+    async def get_stats(self) -> dict:
         pass
 
     @abstractmethod
-    async def store_record(self, record: DNSRecord, expiration: Optional[int] = None) -> None:
-        pass
-
-    @abstractmethod
-    async def get_associated_records(self, rdata: str) -> List[str]:
-        pass
-
-    @abstractmethod
-    async def stream_records(self, t: str, chunk_size: int) -> AsyncGenerator[str, None]:
+    async def get_sensors(self) -> list[tuple[str, int]]:
         pass

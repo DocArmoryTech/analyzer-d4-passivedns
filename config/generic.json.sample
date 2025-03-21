@@ -5,9 +5,7 @@
     "expiration.16": "Expiration time for TXT records (type 16), e.g., 24000 seconds (~6.67 hours).",
     "expiration.99": "Expiration time for SPF records (type 99), e.g., 26000 seconds (~7.22 hours).",
 },
-  "exclude": {
-    "substrings": ["spamhaus.org", "asn.cymru.com"]
-  },
+  "exclude": ["spamhaus.org", "asn.cymru.com"],
   "expiration": {
     "16": 24000,
     "99": 26000

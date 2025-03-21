@@ -2,17 +2,14 @@
 import asyncio
 from ..default.helpers import logger
 from ..default.exceptions import DNSParseError
-from ..db.base import Database
+from ..databases.base import Database
 from ..schemas import DNSRecord
 from .base import Ingestor
 
 class RedisQueueIngestor(Ingestor):
-    def __init__(self, db: Database, queue_name: str, dnstype: dict, excludesubstrings: list, expirations: dict):
+    def __init__(self, db: Database, queue_name: str):
         super().__init__(db)
         self.queue_name = queue_name
-        self.dnstype = dnstype
-        self.excludesubstrings = excludesubstrings
-        self.expirations = expirations
 
     def parse_line(self, line: str) -> DNSRecord | None:
         vkey = ['timestamp', 'ip-src', 'ip-dst', 'class', 'q', 'type', 'v', 'ttl', 'count']
@@ -24,16 +21,15 @@ class RedisQueueIngestor(Ingestor):
         record = dict(zip(vkey, v))
         
         try:
-            rrtype = next(t for t, val in self.dnstype.items() if val == record['type'])
             return DNSRecord(
-                time_first=record['timestamp'],
-                time_last=record['timestamp'],
+                time_first=int(record['timestamp']),
+                time_last=int(record['timestamp']),
                 rrname=record['q'],
-                rrtype=rrtype,  # Validated by DNSRecord
-                rdata=record['v'],
-                count=record['count']
+                rrtype=record['type'],
+                rdata=[record['v']],
+                count=int(record['count'])
             )
-        except (KeyError, ValueError, StopIteration) as e:
+        except (ValueError, TypeError) as e:
             raise DNSParseError(f"Failed to parse record: {line} - {e}")
 
     async def ingest(self) -> None:
@@ -51,10 +47,11 @@ class RedisQueueIngestor(Ingestor):
                 try:
                     rdns = self.parse_line(l)
                     if rdns:
-                        await self.db.process_record(rdns, self.dnstype, self.excludesubstrings, self.expirations)
+                        await self.db.store_record(rdns)
                         logger.debug({"event": "ingest_record", "record": rdns.dict()})
-                except (DNSParseError, ValueError) as e:
+                except DNSParseError as e:
                     logger.debug({"event": "ingest_error", "error": str(e), "line": l})
                 await asyncio.sleep(0)
         except Exception as e:
             logger.error({"event": "ingest_error", "error": str(e)})
+            self.running = False

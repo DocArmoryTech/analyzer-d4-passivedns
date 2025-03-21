@@ -1,0 +1,25 @@
+{
+    "alerts": [
+        {
+            "name": "suspicious_domain",
+            "condition": {"rrname": "regex:.*\\.xyz$"},
+            "method": "log",
+            "level": "warning"
+        },
+        {
+            "name": "specific_ip",
+            "condition": {"rdata": "1.2.3.4"},
+            "method": "webhook",
+            "url": "https://example.com/alert"
+        },
+        {
+            "name": "ip_range",
+            "condition": {"rdata": "in:1.2.3.0/24"},
+            "method": "mail",
+            "smtp_host": "smtp.example.com",
+            "smtp_port": 587,
+            "sender": "alerts@example.com",
+            "recipient": "admin@example.com"
+        }
+    ]
+}

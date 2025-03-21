@@ -13,7 +13,7 @@ from pathlib import Path
 
 # URL of the IANA DNS RR types CSV
 IANA_URL = "https://www.iana.org/assignments/dns-parameters/dns-parameters-4.csv" #20/03/2025
-OUTPUT_FILE = Path(__file__).parent.parent / "config" / "records-type.json"
+OUTPUT_FILE = Path(__file__).parent.parent / "config" / "rrtypes.json"
 
 def fetch_and_convert():
     """Fetch the IANA CSV and convert it to JSON."""

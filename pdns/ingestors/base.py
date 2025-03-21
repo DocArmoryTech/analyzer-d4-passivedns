@@ -1,6 +1,6 @@
 # pdns/ingestors/base.py
 from abc import ABC, abstractmethod
-from ..db.base import Database
+from ..databases.base import Database
 
 class Ingestor(ABC):
     """Abstract base class for ingestors."""
