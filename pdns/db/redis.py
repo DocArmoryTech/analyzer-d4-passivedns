@@ -1,7 +1,7 @@
 # pdns/databases/redis.py
 import redis.asyncio as redis
 from ..schemas import DNSRecord
-from ..rrtypes import rrset  # Add this
+from ..rrtypes import rrset  
 from ..default.exceptions import DNSParseError
 from .base import Database
 from typing import List, Optional, Tuple, AsyncGenerator

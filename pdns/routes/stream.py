@@ -1,13 +1,13 @@
 # pdns/routes/stream.py
 from fastapi import APIRouter, Request, Depends, Query, HTTPException
 from fastapi.responses import StreamingResponse
-from typing import Optional  # Add this for Optional type hint
+from typing import Optional
 from ..main import limiter, get_database
 from ..queries import get_associated_records, stream_records
-from ..default.helpers import logger, format_record, get_remote_address
+from ..default.helpers import logger, get_remote_address
 from ..rrtypes import rrset, rrset_supported
-from ..databases.base import Database
-import json
+from ..schemas import DNSRecord
+from ..db.base import Database
 import iptools
 
 router = APIRouter(prefix="/stream", tags=["stream"])
@@ -23,7 +23,6 @@ async def stream(
     db: Database = Depends(get_database),
     auth=Depends(optional_auth)
 ):
-    # Validate rrtype query parameter against rrset filtered by rrset_supported
     valid_rrtypes = [k for k, v in rrset.items() if v in rrset_supported]
     if rrtype and rrtype.upper() not in valid_rrtypes:
         raise HTTPException(400, detail=f"Invalid rrtype: {rrtype}. Supported types: {', '.join(valid_rrtypes)}")
@@ -37,37 +36,32 @@ async def stream(
                     return
                 for x in associated:
                     async for record in stream_records(db, x, chunk_size):
-                        # Parse the ||-separated string from stream_records
                         r = record.strip().split("||")
-                        parsed = {
-                            "rrname": r[0],
-                            "rrtype": next(k for k, v in rrset.items() if v == r[1]),  # Map numeric to name
-                            "rdata": r[2],
-                            "time_first": r[3],
-                            "time_last": r[4],
-                            "count": r[5]
-                        }
-                        yield f"{json.dumps(format_record(parsed, time_format))}\n"
+                        dns_record = DNSRecord(
+                            rrname=r[0],
+                            rrtype=next(k for k, v in rrset.items() if v == r[1]),
+                            rdata=[r[2]],
+                            time_first=int(r[3]),
+                            time_last=int(r[4]),
+                            count=int(r[5])
+                        )
+                        yield dns_record.to_ndjson(time_format)
             else:
                 found = False
-                # Convert rrtype to numeric for filtering if provided
                 rrtype_value = rrset.get(rrtype.upper()) if rrtype else None
                 async for record in stream_records(db, q.strip(), chunk_size):
-                    # Parse the ||-separated string
                     r = record.strip().split("||")
-                    parsed = {
-                        "rrname": r[0],
-                        "rrtype": r[1],  # Numeric initially
-                        "rdata": r[2],
-                        "time_first": r[3],
-                        "time_last": r[4],
-                        "count": r[5]
-                    }
-                    # Filter by rrtype if specified (compare numeric values)
-                    if rrtype_value is None or parsed["rrtype"] == rrtype_value:
+                    dns_record = DNSRecord(
+                        rrname=r[0],
+                        rrtype=r[1],  # Numeric initially, validated to name by DNSRecord
+                        rdata=[r[2]],
+                        time_first=int(r[3]),
+                        time_last=int(r[4]),
+                        count=int(r[5])
+                    )
+                    if rrtype_value is None or rrset[dns_record.rrtype] == rrtype_value:
                         found = True
-                        parsed["rrtype"] = next(k for k, v in rrset.items() if v == parsed["rrtype"])  # Map to name
-                        yield f"{json.dumps(format_record(parsed, time_format))}\n"
+                        yield dns_record.to_ndjson(time_format)
                 if not found:
                     yield "[]\n"
         except Exception as e:

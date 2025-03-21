@@ -87,14 +87,3 @@ def get_config(config_type: str, entry: str | None=None, quiet: bool=False) -> A
         return sample_config[entry]
     return sample_config
 
-def get_redis() -> redis.Redis:
-    from .exceptions import RedisConnectionError
-    global redis_analyzer
-    if redis_analyzer is not None:
-        return redis_analyzer
-    db = get_config('generic', 'socket_path')
-    try:
-        conn = redis.Redis(unix_socket_path=socket_path, db=0, decode_responses=True)
-        conn.ping()
-    except redis.ConnectionError as e:
-        logger = load_logging_config()# Rate limiter setup

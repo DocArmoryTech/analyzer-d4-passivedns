@@ -9,26 +9,21 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from .default.helpers import logger, get_config
 from .databases.redis import RedisDatabase
-from .databases.memory import MemoryDatabase  # Optional, if implemented
+from .databases.memory import MemoryDatabase
 from .databases.base import Database
 from .routes import info, query, fquery, stream
-import json
-import os
 
 limiter = Limiter(key_func=get_remote_address)
-
-TOKEN_FILE = os.getenv("AUTH_TOKEN_FILE", "config/tokens.json")
 VALID_TOKENS = []
-AUTH_CONFIG_FILE = os.getenv("AUTH_CONFIG_FILE", "config/auth.json")
 
 def load_bearer_tokens():
     global VALID_TOKENS
     try:
         tokens_data = get_config("tokens")
         VALID_TOKENS = [t["value"] for t in tokens_data.get("tokens", [])]
-        logger.info(f"Loaded {len(VALID_TOKENS)} tokens from {TOKEN_FILE}")
+        logger.info(f"Loaded {len(VALID_TOKENS)} tokens from configuration")
     except Exception as e:
-        logger.error(f"Failed to load token file {TOKEN_FILE}: {str(e)}")
+        logger.error(f"Failed to load tokens configuration: {str(e)}")
 
 def token_reload_thread():
     while True:
@@ -46,8 +41,6 @@ def get_database_backend() -> Database:
 
     if db_type == "redis":
         return RedisDatabase(**config)
-    elif db_type == "memory":
-        return MemoryDatabase()  # Optional, if implemented
     else:
         raise ValueError(f"Unknown database type: {db_type}")
 
@@ -91,8 +84,8 @@ DEFAULT_CONFIG = {
         "query": {"auth": "none"},
         "fquery": {"auth": "none"},
         "stream": {"auth": "none"}
-        }
     }
+}
 
 try:
     auth_config = get_config("auth")

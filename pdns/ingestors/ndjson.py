@@ -2,7 +2,7 @@
 import asyncio
 import json
 from ..default.helpers import logger
-from ..databases.base import Database
+from ..db.base import Database
 from ..schemas import DNSRecord
 from .base import Ingestor
 

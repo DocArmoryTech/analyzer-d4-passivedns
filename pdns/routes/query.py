@@ -1,12 +1,12 @@
 # pdns/routes/query.py
 from fastapi import APIRouter, Request, Response, Depends, Query, HTTPException
-from typing import Optional  # Add this for Optional type hint
+from typing import Optional
 from ..main import limiter, get_database
 from ..queries import get_record
-from ..default.helpers import logger, format_record, get_remote_address
+from ..default.helpers import logger, get_remote_address
 from ..rrtypes import rrset, rrset_supported
 from ..schemas import DNSRecord
-from ..databases.base import Database
+from ..db.base import Database
 import json
 
 router = APIRouter(prefix="/query", tags=["query"])
@@ -23,14 +23,12 @@ async def query(
     time_format: str = Query(default="unix", pattern="^(unix|iso)$", description="Timestamp format: unix (int) or iso (string)"),
     format: str = Query(default="ndjson", pattern="^(ndjson|json)$", description="Response format: ndjson or json"),
     db: Database = Depends(get_database),
-    auth=Depends(optional_auth)  # Assuming optional_auth is defined elsewhere
+    auth=Depends(optional_auth)
 ):
-    # Validate rrtype query parameter against rrset filtered by rrset_supported
     valid_rrtypes = [k for k, v in rrset.items() if v in rrset_supported]
     if rrtype and rrtype.upper() not in valid_rrtypes:
         raise HTTPException(400, detail=f"Invalid rrtype: {rrtype}. Supported types: {', '.join(valid_rrtypes)}")
 
-    # Pass numeric rrtype to get_record if provided (convert name to value)
     rrtype_value = rrset.get(rrtype.upper()) if rrtype else None
     records, next_cursor, total = await get_record(db, q.strip(), cursor, limit, rrtype_value)
     
@@ -44,19 +42,23 @@ async def query(
         elif next_cursor:
             headers["X-Next-Cursor"] = next_cursor
     
-    # Convert numeric rrtype from get_record to name for response
-    formatted_records = [
-        format_record(
-            {
-                **r,
-                "rrtype": next(k for k, v in rrset.items() if v == r["rrtype"])  # Map numeric to name
-            },
-            time_format
-        ) for r in records
-    ]
+    formatted_records = []
+    for r in records:
+        dns_record = DNSRecord(
+            rrname=r["rrname"],
+            rrtype=next(k for k, v in rrset.items() if v == r["rrtype"]),
+            rdata=[r["rdata"]],  # Single value from db, wrapped as list
+            time_first=r["time_first"],
+            time_last=r["time_last"],
+            count=r["count"]
+        )
+        if format == "ndjson":
+            formatted_records.append(dns_record.to_ndjson(time_format))
+        else:
+            formatted_records.append(json.loads(dns_record.to_json(time_format)))
     
     if format == "ndjson":
-        response_content = "\n".join(json.dumps(record) for record in formatted_records) + "\n"
+        response_content = "".join(formatted_records)
         media_type = "application/x-ndjson"
     else:
         response_content = json.dumps(
