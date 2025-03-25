@@ -17,6 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
+install-kvrocks = "bash:scripts/install-kvrocks.sh"
 pdns-import = "d4pdns.pdns-import:main"
 pdns-import-cof = "d4pdns.pdns-import-cof:main"
 pdns-ingestion = "d4pdns.pdns-ingestion:main"
