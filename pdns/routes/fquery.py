@@ -5,8 +5,8 @@ from ..main import limiter, get_database
 from ..queries import get_record, get_associated_records
 from ..default.helpers import logger, get_remote_address
 from ..rrtypes import rrset, rrset_supported
-from ..schemas import DNSRecord
-from ..databases.base import Database
+from ..schemas import PDNSRecord, MetadataResponse
+from ..db.base import Database
 import json
 import iptools
 
@@ -34,13 +34,13 @@ async def full_query(
     total = 0
     next_cursor = None
     
-    rrtype_value = rrset.get(rrtype.upper()) if rrtype else None
+    rrtype_value = rrtype.upper() if rrtype else None
     
     if iptools.ipv4.validate_ip(q) or iptools.ipv6.validate_ip(q):
         associated = await get_associated_records(db, q)
         for x in associated:
             records, nc, tc = await get_record(db, x, cursor, limit, rrtype_value)
-            result.extend(records)
+            result.extend([r for r in records if rrtype_value is None or r.rrtype == rrtype_value])
             total += tc
             if (cursor is not None or total > limit) and nc:
                 next_cursor = nc
@@ -49,7 +49,7 @@ async def full_query(
         associated = await get_associated_records(db, q)
         for x in associated:
             records, nc, tc = await get_record(db, x.strip(), cursor, limit, rrtype_value)
-            result.extend(records)
+            result.extend([r for r in records if rrtype_value is None or r.rrtype == rrtype_value])
             total += tc
             if (cursor is not None or total > limit) and nc:
                 next_cursor = nc
@@ -67,26 +67,22 @@ async def full_query(
     
     formatted_records = []
     for r in result:
-        dns_record = DNSRecord(
-            rrname=r["rrname"],
-            rrtype=next(k for k, v in rrset.items() if v == r["rrtype"]),
-            rdata=[r["rdata"]],
-            time_first=r["time_first"],
-            time_last=r["time_last"],
-            count=r["count"]
-        )
+        record = PDNSRecord.from_pdns(r)
         if format == "ndjson":
-            formatted_records.append(dns_record.to_ndjson(time_format))
+            formatted_records.append(record.to_ndjson(time_format))
         else:
-            formatted_records.append(json.loads(dns_record.to_json(time_format)))
+            formatted_records.append(record.dict() if time_format == "unix" else json.loads(record.to_json(time_format)))
     
     if format == "ndjson":
         response_content = "\n".join(formatted_records)
         media_type = "application/x-ndjson"
     else:
-        response_content = json.dumps(
-            formatted_records if not metadata else {"data": formatted_records, "total": total, "next_cursor": next_cursor}
+        response_data = formatted_records if not metadata else MetadataResponse(
+            data=[PDNSRecord.from_pdns(r) for r in result],
+            total=total,
+            next_cursor=next_cursor
         )
+        response_content = json.dumps(response_data.dict() if isinstance(response_data, MetadataResponse) else response_data)
         media_type = "application/json"
     
     logger.info({"endpoint": "/fquery", "query": q, "client_ip": get_remote_address(request), "status": 200, "record_count": len(result)})

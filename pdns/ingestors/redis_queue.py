@@ -3,7 +3,7 @@ import asyncio
 from ..default.helpers import logger
 from ..default.exceptions import DNSParseError
 from ..db.manager import DatabaseManager
-from ..schemas import DNSRecord
+from pypdns import PDNSRecord  # Import PDNSRecord from pypdns
 from .base import Ingestor
 
 class RedisQueueIngestor(Ingestor):
@@ -11,7 +11,7 @@ class RedisQueueIngestor(Ingestor):
         super().__init__(db_manager)
         self.queue_name = queue_name
 
-    def parse_line(self, line: str) -> DNSRecord | None:
+    def parse_line(self, line: str) -> PDNSRecord | None:
         vkey = ['timestamp', 'ip-src', 'ip-dst', 'class', 'q', 'type', 'v', 'ttl', 'count']
         if not line or line == '':
             return None
@@ -21,14 +21,15 @@ class RedisQueueIngestor(Ingestor):
         record = dict(zip(vkey, v))
         
         try:
-            return DNSRecord(
-                time_first=int(record['timestamp']),
-                time_last=int(record['timestamp']),
-                rrname=record['q'],
-                rrtype=record['type'],
-                rdata=[record['v']],
-                count=int(record['count'])
-            )
+            record_dict = {
+                "time_first": int(record['timestamp']),
+                "time_last": int(record['timestamp']),
+                "rrname": record['q'],
+                "rrtype": record['type'],
+                "rdata": [record['v']],
+                "count": int(record['count'])
+            }
+            return PDNSRecord(record_dict)
         except (ValueError, TypeError) as e:
             raise DNSParseError(f"Failed to parse record: {line} - {e}")
 
@@ -48,7 +49,7 @@ class RedisQueueIngestor(Ingestor):
                     rdns = self.parse_line(l)
                     if rdns:
                         await self.db_manager.store_record(rdns)
-                        logger.debug({"event": "ingest_record", "record": rdns.dict()})
+                        logger.debug({"event": "ingest_record", "record": rdns.raw})
                 except DNSParseError as e:
                     logger.debug({"event": "ingest_error", "error": str(e), "line": l})
                 await asyncio.sleep(0)

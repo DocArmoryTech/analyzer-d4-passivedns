@@ -1,0 +1,6 @@
+Alert: {{ record.rrname }} {{ record.rrtype }}
+Data: {{ record.rdata | join(', ') }}
+First Seen: {{ record.time_first }}
+Last Seen: {{ record.time_last }}
+Count: {{ record.count }}{% if record.sensor_id %}
+Sensor: {{ record.sensor_id }}{% endif %}

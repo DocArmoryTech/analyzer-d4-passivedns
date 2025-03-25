@@ -5,9 +5,10 @@ from ..main import limiter, get_database
 from ..queries import get_record
 from ..default.helpers import logger, get_remote_address
 from ..rrtypes import rrset, rrset_supported
-from ..schemas import DNSRecord
+from pypdns import PDNSRecord
 from ..db.base import Database
 import json
+from ..schemas import DNSRecord, MetadataResponse
 
 router = APIRouter(prefix="/query", tags=["query"])
 
@@ -29,13 +30,14 @@ async def query(
     if rrtype and rrtype.upper() not in valid_rrtypes:
         raise HTTPException(400, detail=f"Invalid rrtype: {rrtype}. Supported types: {', '.join(valid_rrtypes)}")
 
-    rrtype_value = rrset.get(rrtype.upper()) if rrtype else None
+    rrtype_value = rrtype.upper() if rrtype else None
     records, next_cursor, total = await get_record(db, q.strip(), cursor, limit, rrtype_value)
+    filtered_records = [r for r in records if rrtype_value is None or r.rrtype == rrtype_value]
     
     headers = {"X-Total-Count": str(total)}
     if total > limit:
         if cursor is None:
-            records = records[:limit]
+            filtered_records = filtered_records[:limit]
             headers["X-Next-Cursor"] = str(limit)
             headers["X-Pagination-Required"] = "true"
             logger.warning({"endpoint": "/query", "query": q, "client_ip": get_remote_address(request), "total": total, "limit": limit, "message": "Partial results returned"})
@@ -43,28 +45,24 @@ async def query(
             headers["X-Next-Cursor"] = next_cursor
     
     formatted_records = []
-    for r in records:
-        dns_record = DNSRecord(
-            rrname=r["rrname"],
-            rrtype=next(k for k, v in rrset.items() if v == r["rrtype"]),
-            rdata=[r["rdata"]],  # Single value from db, wrapped as list
-            time_first=r["time_first"],
-            time_last=r["time_last"],
-            count=r["count"]
-        )
+    for r in filtered_records:
+        record = DNSRecord.from_pdns(r)
         if format == "ndjson":
-            formatted_records.append(dns_record.to_ndjson(time_format))
+            formatted_records.append(record.to_ndjson(time_format))
         else:
-            formatted_records.append(json.loads(dns_record.to_json(time_format)))
-    
+            formatted_records.append(record.dict() if time_format == "unix" else json.loads(record.to_json(time_format)))
+
     if format == "ndjson":
         response_content = "".join(formatted_records)
         media_type = "application/x-ndjson"
     else:
-        response_content = json.dumps(
-            formatted_records if not metadata else {"data": formatted_records, "total": total, "next_cursor": next_cursor}
+        response_data = formatted_records if not metadata else MetadataResponse(
+            data=[DNSRecord.from_pdns(r) for r in filtered_records],
+            total=total,
+            next_cursor=next_cursor
         )
+        response_content = json.dumps(response_data.dict() if isinstance(response_data, MetadataResponse) else response_data)
         media_type = "application/json"
     
-    logger.info({"endpoint": "/query", "query": q, "client_ip": get_remote_address(request), "status": 200, "record_count": len(records)})
+    logger.info({"endpoint": "/query", "query": q, "client_ip": get_remote_address(request), "status": 200, "record_count": len(filtered_records)})
     return Response(content=response_content, media_type=media_type, headers=headers)

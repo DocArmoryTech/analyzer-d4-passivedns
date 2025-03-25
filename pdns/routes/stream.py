@@ -9,6 +9,7 @@ from ..rrtypes import rrset, rrset_supported
 from ..schemas import DNSRecord
 from ..db.base import Database
 import iptools
+import json
 
 router = APIRouter(prefix="/stream", tags=["stream"])
 
@@ -35,33 +36,17 @@ async def stream(
                     yield "[]\n"
                     return
                 for x in associated:
-                    async for record in stream_records(db, x, chunk_size):
-                        r = record.strip().split("||")
-                        dns_record = DNSRecord(
-                            rrname=r[0],
-                            rrtype=next(k for k, v in rrset.items() if v == r[1]),
-                            rdata=[r[2]],
-                            time_first=int(r[3]),
-                            time_last=int(r[4]),
-                            count=int(r[5])
-                        )
-                        yield dns_record.to_ndjson(time_format)
+                    async for entry in stream_records(db, x, chunk_size):
+                        record = DNSRecord.from_pdns(entry)
+                        yield record.to_ndjson(time_format)
             else:
                 found = False
-                rrtype_value = rrset.get(rrtype.upper()) if rrtype else None
-                async for record in stream_records(db, q.strip(), chunk_size):
-                    r = record.strip().split("||")
-                    dns_record = DNSRecord(
-                        rrname=r[0],
-                        rrtype=r[1],  # Numeric initially, validated to name by DNSRecord
-                        rdata=[r[2]],
-                        time_first=int(r[3]),
-                        time_last=int(r[4]),
-                        count=int(r[5])
-                    )
-                    if rrtype_value is None or rrset[dns_record.rrtype] == rrtype_value:
+                rrtype_value = rrtype.upper() if rrtype else None
+                async for entry in stream_records(db, q.strip(), chunk_size):
+                    if rrtype_value is None or entry.rrtype == rrtype_value:
                         found = True
-                        yield dns_record.to_ndjson(time_format)
+                        record = DNSRecord.from_pdns(entry)
+                        yield record.to_ndjson(time_format)
                 if not found:
                     yield "[]\n"
         except Exception as e:

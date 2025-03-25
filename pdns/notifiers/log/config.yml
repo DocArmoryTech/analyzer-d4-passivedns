@@ -1,0 +1,4 @@
+name: "log_alert"
+condition:
+  rrtype: "A"
+level: "info"  # Optional, defaults to "info"

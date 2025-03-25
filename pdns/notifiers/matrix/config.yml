@@ -1,0 +1,6 @@
+name: "matrix_alert"
+condition:
+  rdata: "in:10.0.0.0/24"
+homeserver_url: "https://matrix.org"
+access_token: "syt_abc123..."
+room_id: "!roomid:matrix.org"

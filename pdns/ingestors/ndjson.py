@@ -2,7 +2,7 @@
 import asyncio
 from ..default.helpers import logger
 from ..db.manager import DatabaseManager
-from ..schemas import DNSRecord
+from pypdns import PDNSRecord  # Import PDNSRecord from pypdns
 from .base import Ingestor
 import json
 
@@ -27,9 +27,9 @@ class NDJSONFileIngestor(Ingestor):
                         data = json.loads(l)
                         if "rdata" in data and isinstance(data["rdata"], str):
                             data["rdata"] = [data["rdata"]]
-                        rdns = DNSRecord(**data)
+                        rdns = PDNSRecord(data)
                         await self.db_manager.store_record(rdns)
-                        logger.debug({"event": "ingest_record", "record": rdns.dict()})
+                        logger.debug({"event": "ingest_record", "record": rdns.raw})
                     except (json.JSONDecodeError, ValueError) as e:
                         logger.debug({"event": "ingest_error", "error": str(e), "line": l})
                     await asyncio.sleep(0)
