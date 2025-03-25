@@ -1,4 +1,0 @@
-name: "rocketchat_alert"
-condition:
-  rrname: "example.com"
-webhook_url: "https://rocketchat.example.com/hooks/abc"

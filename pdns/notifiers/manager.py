@@ -5,7 +5,6 @@ from .base import Notifier
 import os
 import json
 import importlib
-import re
 import ipaddress
 
 class NotificationManager:
@@ -47,21 +46,12 @@ class NotificationManager:
                 logger.error(f"Failed to load notifier {notifier_name}: {str(e)}")
 
     def matches(self, record: PDNSRecord, condition: dict) -> bool:
-        """Check if the record matches the given condition."""
-        regex_conditions = {}
-        for key, value in condition.items():
-            if value.startswith("regex:"):
-                pattern = value[len("regex:"):]
-                regex_conditions[key] = re.compile(pattern)
-
+        """Check if the record matches the given condition (exact match or IP network)."""
         for key, value in condition.items():
             record_value = getattr(record, key, None) if key != "rdata" else record.rdata[0] if isinstance(record.rdata, list) else record.rdata
             if not record_value:
                 return False
-            if key in regex_conditions:
-                if not regex_conditions[key].match(str(record_value)):
-                    return False
-            elif value.startswith("in:"):
+            if value.startswith("in:"):
                 try:
                     network = ipaddress.ip_network(value[len("in:"):], strict=False)
                     if key == "rdata" and ipaddress.ip_address(record_value) not in network:

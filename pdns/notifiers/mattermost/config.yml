@@ -1,6 +1,0 @@
-name: "mattermost_alert"
-condition:
-  rrtype: "A"
-  rdata: "regex:192\.168\..*"
-webhook_url: "https://mattermost.example.com/hooks/xyz"
-template: "template.jinja"  # Optional, defaults to this

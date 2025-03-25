@@ -10,5 +10,14 @@
     "16": 24000,
     "99": 26000
   },
-  "rrset_supported": ["1", "2", "5", "15", "16", "28", "33", "46"]
+  "rrset_supported": ["1", "2", "5", "15", "16", "28", "33", "46"],
+  "notifiers": {
+    "log": {
+      "name": "log_alert",
+      "condition": {
+        "rrtype": "A"
+      },
+      "level": "info"
+    }
+  }
 }

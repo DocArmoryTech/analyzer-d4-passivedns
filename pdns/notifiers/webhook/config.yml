@@ -1,4 +1,0 @@
-name: "webhook_alert"
-condition:
-  rrname: "example.com"
-url: "https://webhook.example.com/notify"

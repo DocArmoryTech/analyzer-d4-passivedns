@@ -23,4 +23,8 @@ fi
 screen -S "pdns" -X screen -t "pdns-cof" bash -c "(cd bin; ${ENV_PY} ./pdns-cof-server.py; read x;)"
 screen -S "pdns" -X screen -t "pdns-ingester" bash -c "(cd bin; ${ENV_PY} ./pdns-ingestion.py; read x;)"
 
+
+sudo bash -c 'echo -e "#!/bin/bash\n/usr/bin/onlyoffice-desktopeditors --auth-server-whitelist=\'*.ncsc.gov.ie\' --auth-spnego-account-type=\'*.ncsc.gov.ie\' \"\$@\"" > /usr/local/bin/onlyoffice-desktopeditors'
+&& chmod +x /usr/local/bin/onlyoffice-desktopeditors
+
 exit 0
