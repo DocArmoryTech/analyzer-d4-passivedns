@@ -2,6 +2,10 @@
 from ..default.helpers import logger, get_config
 from pypdns import PDNSRecord
 from .base import Notifier
+from .filters.base import NotificationFilter
+from .filters.string import StringFilter
+from .filters.dnsbl import DNSBLFilter
+import asyncio
 import os
 import json
 import importlib
@@ -14,37 +18,52 @@ class NotificationManager:
         """Load notifiers from subdirectories in pdns/notifiers."""
         self.notifiers: list[Notifier] = []
         notifiers_dir = "pdns/notifiers"
-
+        self._lock = asyncio.Lock()
+        self._load_notifiers()
+    
+    def _create_filter(self, config: dict) -> NotificationFilter:
+        """Factory method to create appropriate filter based on config."""
+        filter_type = config.get("filter_type", "string")
+        if filter_type == "string":
+            return StringFilter(config.get("condition", {}))
+        elif filter_type == "dnsbl":
+            return DNSBLFilter(config.get("dnsbl_domain", "zen.spamhaus.org"))
+        else:
+            raise ValueError(f"Unknown filter type: {filter_type}")
+        
+    def _load_notifiers(self):
+        notifiers_dir = "pdns/notifiers"
         if not os.path.exists(notifiers_dir):
-            logger.warning(f"Notifiers directory {notifiers_dir} does not exist, no notifiers loaded")
+            logger.warning(f"Notifiers directory {notifiers_dir} does not exist")
             return
 
         for notifier_name in os.listdir(notifiers_dir):
-            notifier_path = os.path.join(notifiers_dir, notifier_name)
+            notifier_path = os.path.join(notifier_path, notifier_name)
             if not os.path.isdir(notifier_path) or notifier_name.startswith("__"):
                 continue
 
             config_path = os.path.join(notifier_path, "config.json")
             if not os.path.exists(config_path):
-                logger.warning(f"No config.json found in {notifier_name}, skipping")
+                logger.warning(f"No config.json in {notifier_name}")
                 continue
 
             try:
                 with open(config_path, "r") as f:
                     config = json.load(f)
-
-                # Use get_config for LogNotifier
+                
                 if notifier_name == "log":
                     config = get_config("notifiers", {}).get("log", {})
-
-                # Dynamically import the notifier class
+                
                 module = importlib.import_module(f"pdns.notifiers.{notifier_name}")
                 notifier_class = getattr(module, f"{notifier_name.capitalize()}Notifier")
-                self.notifiers.append(notifier_class(config, notifier_path))
-                logger.debug({"event": "notifier_loaded", "name": config.get("name"), "type": notifier_name})
+                notifier = notifier_class(config, notifier_path)
+                filter_instance = self._create_filter(config)
+                self.notifiers.append((notifier, filter_instance))
+                logger.debug({"event": "notifier_loaded", "name": config.get("name")})
             except Exception as e:
                 logger.error(f"Failed to load notifier {notifier_name}: {str(e)}")
 
+                
     def matches(self, record: PDNSRecord, condition: dict) -> bool:
         """Check if the record matches the given condition (exact match or IP network)."""
         for key, value in condition.items():

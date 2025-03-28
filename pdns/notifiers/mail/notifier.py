@@ -2,7 +2,6 @@ from ..base import Notifier
 from ...default.helpers import logger
 import aiosmtplib
 from email.message import EmailMessage
-from pypdns import PDNSRecord
 
 class MailNotifier(Notifier):
     def __init__(self, config: dict, template_dir: str):
@@ -12,8 +11,7 @@ class MailNotifier(Notifier):
         self.sender = config["sender"]
         self.recipient = config["recipient"]
 
-    async def notify(self, record: PDNSRecord) -> None:
-        message = self.render_template(record)
+    async def notify(self, message: str) -> None:
         msg = EmailMessage()
         msg["Subject"] = f"Alert: {self.name}"
         msg["From"] = self.sender

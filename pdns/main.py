@@ -8,11 +8,10 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from .default.helpers import logger, get_config
-from .databases.redis import RedisDatabase
-from .databases.memory import MemoryDatabase
-from .databases.base import Database
+from .db.redis import RedisDatabase
+from .db.base import Database
 from .routes import info, query, fquery, stream
-
+from .db.manager import DatabaseManager
 limiter = Limiter(key_func=get_remote_address)
 VALID_TOKENS = []
 
@@ -44,14 +43,16 @@ def get_database_backend() -> Database:
     else:
         raise ValueError(f"Unknown database type: {db_type}")
 
-async def get_database() -> Database:
-    db = get_database_backend()
-    await db.connect()
+async def get_database() -> DatabaseManager:
+    db_backend = get_database_backend()
+    db = DatabaseManager(db_backend)
+    await db.initialize()
     try:
         yield db
+    
     finally:
-        await db.disconnect()
-
+        await db.shutdown()
+        
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     thread = threading.Thread(target=token_reload_thread, daemon=True)

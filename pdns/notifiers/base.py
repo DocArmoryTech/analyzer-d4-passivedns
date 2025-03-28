@@ -1,20 +1,17 @@
-# pdns/notifiers/base.py
 from abc import ABC, abstractmethod
 from pypdns import PDNSRecord
 from jinja2 import Environment, FileSystemLoader, TemplateError
 from ..default.helpers import logger
 
 class Notifier(ABC):
-    """Abstract base class for alert notification handlers with Jinja2 templating."""
-
+    """Abstract base class for alert notification handlers."""
     def __init__(self, config: dict, template_dir: str):
         self.name = config.get("name")
-        self.condition = config.get("condition", {})
-        self.template_file = config.get("template", "template.jinja")
         self.jinja_env = Environment(loader=FileSystemLoader(template_dir), autoescape=True)
+        self.template_file = config.get("template", "template.jinja")
 
     def render_template(self, record: PDNSRecord) -> str:
-        """Render the Jinja2 template from the file with the record data."""
+        """Render the Jinja2 template with record data."""
         try:
             template = self.jinja_env.get_template(self.template_file)
             record_dict = record.raw if record.raw else {
@@ -32,6 +29,6 @@ class Notifier(ABC):
             return f"Error rendering template: {str(e)}"
 
     @abstractmethod
-    async def notify(self, record: PDNSRecord) -> None:
-        """Send the alert notification for the record."""
+    async def notify(self, message: str) -> None:
+        """Send the notification with pre-rendered message."""
         pass

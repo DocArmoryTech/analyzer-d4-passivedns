@@ -16,8 +16,8 @@ class NDJSONFileIngestor(Ingestor):
         logger.info({"event": "ingestor_start", "file": self.file_path})
         
         try:
-            with open(self.file_path, "r") as f:
-                for line in f:
+            async with aiofiles.open(self.file_path, "r") as f:
+                async for line in f:
                     if not self.running:
                         break
                     l = line.strip()

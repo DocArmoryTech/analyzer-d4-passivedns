@@ -1,27 +1,45 @@
-[project]
+[tool.poetry]
 name = "analyzer-d4-passivedns"
-version = "0.5.1"
-description = "analyzer-d4-passivedns is an analyzer for a D4 network sensor including a complete Passive DNS server. The analyser can process data produced by D4 sensors (in passivedns CSV format (more to come)) or independently from D4 using COF websocket streams."
+version = "0.6.0"  # Bumped to reflect refactor
+description = "A Passive DNS server and analyzer for D4 network sensors, supporting multiple ingestion sources (CSV, NDJSON, JSON, WebSocket, Redis) and a FastAPI-based API."
 authors = [
-    {name = "D4 Project",email = "info@circl.lu"}
+    { name = "D4 Project", email = "info@circl.lu" }
 ]
-license = {text = "AGPL-3.0"}
+license = "AGPL-3.0"
 readme = "README.md"
-requires-python = ">=3.10"
-dependencies = [
-    "redis (>=5.2.1,<6.0.0)",
-    "iptools (>=0.7.0,<0.8.0)",
-    "tornado (>=6.4.2,<7.0.0)",
-    "ndjson (>=0.3.1,<0.4.0)",
-    "websocket-client (>=1.8.0,<2.0.0)"
-]
+packages = [{ include = "pdns" }]  # Explicitly include pdns/ as a package
 
-[project.scripts]
-install-kvrocks = "bash:scripts/install-kvrocks.sh"
-pdns-import = "d4pdns.pdns-import:main"
-pdns-import-cof = "d4pdns.pdns-import-cof:main"
-pdns-ingestion = "d4pdns.pdns-ingestion:main"
+[tool.poetry.dependencies]
+python = ">=3.10"
+# Core dependencies for refactored project
+fastapi = "^0.115.0"  # Replaces tornado for API
+uvicorn = "^0.30.0"   # ASGI server for FastAPI
+aioredis = "^2.0.1"   # Async Redis client
+pydantic = "^2.9.2"   # For schemas
+pypdns = "^1.0"       # Passive DNS record handling
+slowapi = "^0.1.9"    # Rate limiting for FastAPI
+iptools = "^0.7.0"    # IP validation in routes
+aiofiles = "^23.2"    # Async file I/O for ingestors
+websockets = "^12.0"  # WebSocket ingestor
+python-dotenv = "^1.0"  # .env support in default/helpers
+
+# Optional dependencies from original project
+redis = { version = ">=5.2.1,<6.0.0", optional = true }  # For synchronous Redis (if still used)
+ndjson = { version = ">=0.3.1,<0.4.0", optional = true }  # For NDJSON parsing (if not replaced by built-in json)
+websocket-client = { version = ">=1.8.0,<2.0.0", optional = true }  # For sync WebSocket (if still used)
+tornado = { version = ">=6.4.2,<7.0.0", optional = true }  # For backwards compatibility
+
+[tool.poetry.extras]
+legacy = ["redis", "ndjson", "websocket-client", "tornado"]  # Group original deps as optional
+
+[tool.poetry.scripts]
+# Updated CLI entry points
+pdns-import = "pdns.cli:main"  # Maps to cli.py (adjust if split into specific importers)
+pdns-ingestion = "pdns.cli:main"  # Unified ingestion script
+validate-config = "tools.validate_config_files:main"  # New validation script
+
+# Removed pdns-import-cof (assumed merged into cli.py) and install-kvrocks (bash script not portable in Poetry)
 
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
+requires = ["poetry-core>=1.0.0"]  # Updated to a stable Poetry version
 build-backend = "poetry.core.masonry.api"
