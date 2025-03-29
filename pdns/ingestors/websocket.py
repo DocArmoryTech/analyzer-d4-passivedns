@@ -25,7 +25,7 @@ class WebSocketIngestor(Ingestor):
                         # Ensure rdata is a list if provided as a string
                         if "rdata" in data and isinstance(data["rdata"], str):
                             data["rdata"] = [data["rdata"]]
-                        rdns = PDNSRecord(data)  # PDNSRecord takes a dict
+                        rdns = PDNSRecord(**data)  # PDNSRecord takes a dict
                         await self.db_manager.store_record(rdns)
                         logger.debug({"event": "ingest_record", "record": rdns.raw})  # Use .raw for logging
                     except (json.JSONDecodeError, ValueError) as e:

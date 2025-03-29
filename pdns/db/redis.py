@@ -137,23 +137,19 @@ class RedisDatabase(Database):
     async def stream_records(self, key: str, chunk_size: int = 100) -> AsyncGenerator[PDNSRecord, None]:
         """Stream records for a given key in chunks."""
         try:
-            cursor = 0
-            while True:
-                records = await self.redis.zrange(key, cursor, cursor + chunk_size - 1)
-                if not records:
-                    break
-                for record in records:
-                    data = json.loads(record)
-                    yield PDNSRecord(
-                        rrname=data["rrname"],
-                        rrtype=data["rrtype"],
-                        rdata=data["rdata"],
-                        time_first=data["time_first"],
-                        time_last=data["time_last"],
-                        count=data["count"],
-                        sensor_id=data.get("sensor_id")
-                    )
-                cursor += chunk_size
+            if not self.redis_pool:
+                raise RedisConnectionError("Redis not connected")
+            async with self.redis_pool.get() as redis:
+                cursor = 0
+                while True:
+                    cursor, keys = await redis.scan(cursor, match=f"pdns:{rrname}:*", count=chunk_size)
+                    for key in keys:
+                        value = await redis.get(key)
+                        if value:
+                            data = json.loads(value)
+                            yield PDNSRecord(**data)
+                    if cursor == 0:
+                        break
         except Exception as e:
             logger.error({"event": "redis_stream_records_failed", "key": key, "error": str(e)})
 

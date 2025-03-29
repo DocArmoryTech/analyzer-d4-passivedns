@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from . import env_global_name
-from .exceptions import ConfigError, CreateDirectoryException, MissingEnv
+from .exceptions import ConfigError, MissingEnv
 
 configs: dict[str, dict[str, Any]] = {}
 logger = logging.getLogger('Helpers')
