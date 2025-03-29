@@ -4,8 +4,8 @@ from typing import Optional
 from ..main import limiter, get_database, optional_auth
 from ..queries import get_associated_records, stream_records
 from ..default.helpers import logger, get_remote_address
-from ..rrtypes import rrset, rrset_supported
-from ..schemas import DNSRecord, TimeFormat  # Updated import
+from ..rrtypes import rrset, RRType  # Updated import
+from ..schemas import DNSRecord, TimeFormat
 from ..db.base import Database
 import iptools
 import json
@@ -18,19 +18,16 @@ async def stream(
     request: Request,
     q: str,
     chunk_size: int = Query(default=100, ge=10, le=1000, description="Number of records per chunk"),
-    rrtype: Optional[str] = Query(default=None, description="Filter by RR type (e.g., A, AAAA)"),
+    rrtype: Optional[RRType] = Query(default=None, description="Filter by RR type (e.g., A, AAAA)"),  # Use RRType
     time_format: TimeFormat = Query(default=TimeFormat.unix, description="Timestamp format: unix (int) or iso (string)"),
     db: Database = Depends(get_database),
     auth=Depends(optional_auth)
 ):
-    valid_rrtypes = [k for k, v in rrset.items() if v in rrset_supported]
-    if rrtype and rrtype.upper() not in valid_rrtypes:
-        raise HTTPException(400, detail=f"Invalid rrtype: {rrtype}. Supported types: {', '.join(valid_rrtypes)}")
+    rrtype_value = rrtype.value if rrtype else None  # Access enum value
     
     async def event_stream():
         record_count = 0
         try:
-            rrtype_value = rrtype.upper() if rrtype else None
             if iptools.ipv4.validate_ip(q) or iptools.ipv6.validate_ip(q):
                 associated = await get_associated_records(db, q)
                 if not associated:

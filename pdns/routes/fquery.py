@@ -3,8 +3,8 @@ from typing import Optional
 from ..main import limiter, get_database, optional_auth
 from ..queries import get_record, get_associated_records
 from ..default.helpers import logger, get_remote_address
-from ..rrtypes import rrset, rrset_supported
-from ..schemas import DNSRecord, MetadataResponse, TimeFormat, ResponseFormat  # Updated import
+from ..rrtypes import rrset, RRType  # Updated import
+from ..schemas import DNSRecord, MetadataResponse, TimeFormat, ResponseFormat
 from ..db.base import Database
 import iptools
 
@@ -17,22 +17,17 @@ async def full_query(
     q: str,
     cursor: Optional[str] = Query(default=None, description="Cursor for pagination, required if > limit"),
     limit: int = Query(default=200, ge=10, le=1000, description="Max records per page or total without cursor"),
-    rrtype: Optional[str] = Query(default=None, description="Filter by RR type (e.g., A, AAAA)"),
+    rrtype: Optional[RRType] = Query(default=None, description="Filter by RR type (e.g., A, AAAA)"),  # Use RRType
     metadata: bool = Query(default=False, description="Wrap results in metadata object"),
     time_format: TimeFormat = Query(default=TimeFormat.unix, description="Timestamp format: unix (int) or iso (string)"),
     format: ResponseFormat = Query(default=ResponseFormat.ndjson, description="Response format: ndjson or json"),
     db: Database = Depends(get_database),
     auth=Depends(optional_auth)
 ):
-    valid_rrtypes = [k for k, v in rrset.items() if v in rrset_supported]
-    if rrtype and rrtype.upper() not in valid_rrtypes:
-        raise HTTPException(400, detail=f"Invalid rrtype: {rrtype}. Supported types: {', '.join(valid_rrtypes)}")
-    
+    rrtype_value = rrtype.value if rrtype else None  # Access enum value
     result = []
     total = 0
     next_cursor = None
-    
-    rrtype_value = rrtype.upper() if rrtype else None
     
     if iptools.ipv4.validate_ip(q) or iptools.ipv6.validate_ip(q):
         associated = await get_associated_records(db, q)
