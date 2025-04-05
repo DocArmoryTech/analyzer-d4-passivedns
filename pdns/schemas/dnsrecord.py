@@ -1,6 +1,6 @@
 # pdns/schemas.py
 from pydantic import BaseModel
-from typing import List, Optional, Union
+from typing import List, Optional
 from pypdns import PDNSRecord
 import json
 from datetime import datetime
@@ -49,4 +49,4 @@ class DNSRecord(BaseModel):
     def time_last_iso(self) -> str:
         return datetime.fromtimestamp(self.time_last).isoformat()
 
-__all__ = ["TimeFormat", "ResponseFormat", "DNSRecord", "MetadataResponse"]
+__all__ = ["TimeFormat", "ResponseFormat", "DNSRecord"]

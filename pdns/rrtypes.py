@@ -1,36 +1,36 @@
-# pdns/rrtypes.py
 from .default.helpers import get_config
 from enum import Enum
+from typing import List
 
-# Load rrset from config/rrtypes.json and convert to a dictionary
+# Load rrtypes from config/rrtypes.json
 rrtypes_config = get_config("rrtypes")  # List of dicts from rrtypes.json
-rrset = {entry["type"]: entry["value"] for entry in rrtypes_config}  # e.g., {"A": "1", "NS": "2", ...}
 
-# Optional: Keep full rrtypes data if needed elsewhere
-rrtypes_full = {entry["type"]: entry for entry in rrtypes_config}  # e.g., {"A": {"type": "A", "value": "1", ...}}
+# Create RRTypeFull enum for all RR types
+RRType = Enum(
+    "RRType",
+    {entry["type"].upper(): entry["value"] for entry in rrtypes_config},
+    type=str
+)
 
-# Dynamically create RRType enum for supported types
-def create_rrtype_enum():
-    supported_types = get_config("generic", "rrset_supported")  # e.g., ["1", "2"] or ["A", "AAAA"]
+# Load supported types from config
+supported_types = get_config("generic", "rrset_supported")  # e.g., ["1", "2"] or ["A", "AAAA"]
+
+# Create RRTypeSupported enum for supported types
+def create_supported_enum(supported: list[str]) -> Enum:
     enum_dict = {}
-    
-    for t in supported_types:
+    rrset = {entry["type"].upper(): entry["value"] for entry in rrtypes_config}  # Temp mapping for lookup
+    for t in supported:
         t_upper = t.upper()
         if t_upper in rrset:  # Specified by name (e.g., "A")
-            enum_dict[t_upper] = t_upper
+            enum_dict[t_upper] = rrset[t_upper]
         elif t in rrset.values():  # Specified by value (e.g., "1")
             # Find the corresponding name
-            name = next(k for k, v in rrset.items() if v == t)
-            enum_dict[name] = name
+            name = next((k for k, v in rrset.items() if v == t), None)
+            if name:
+                enum_dict[name] = rrset[name]
         # Ignore invalid entries silently
-    
-    return Enum("RRType", enum_dict, type=str)
+    return Enum("SupportedRRType", enum_dict, type=str)
 
-RRType = create_rrtype_enum()
+RRTypeSupported = create_supported_enum(supported_types)
 
-# Compute rrset_supported as a list of numeric values
-rrset_supported = [
-    rrset[name] for name in RRType.__members__ if name in rrset
-]
-
-__all__ = ["rrset", "rrset_supported", "RRType", "rrtypes_full"]
+__all__ = ["RRType", "SupportedRRType"]

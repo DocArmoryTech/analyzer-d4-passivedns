@@ -9,17 +9,14 @@ from typing import Tuple, List, Optional, AsyncGenerator
 class RedisDatabase(Database):
     """Redis implementation of the Database interface."""
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 6400, db: int = 0):
-        self.redis_pool = None
-        self.expirations: Dict[str, int] = get_config("generic", "expiration", quiet=True) or {}
-
 
     def __init__(self):
         """Initialize Redis connection based on database.json config."""
-        self.config = get_config("redis", default={})  # Load redis config from database.json or fallback
-        self.db_number = self.config.get("db", 0)  # Default to DB 0 if not specified
+        self.config = get_config("redis", default={"ip": "127.0.0.1", "port": 6400, "db": 0})
+        self.db_number = self.config.get("db", 0)
+        self.redis_pool = None
+        self.expirations = get_config("generic", "expiration", quiet=True) or {}
 
-        
     async def connect(self) -> None:
         """Establish a connection pool to Redis."""
         try:
@@ -105,34 +102,69 @@ class RedisDatabase(Database):
 
         logger.debug({"event": "record_stored", "rrname": rrname, "rrtype": rrtype, "rdata": rdata, "sensor_id": record.sensor_id})
             
-    async def get_record(self, key: str, cursor: Optional[str] = None, limit: int = 200, rrtype: Optional[str] = None) -> Tuple[List[PDNSRecord], Optional[str], int]:
-        """Fetch records for a given key with pagination."""
-        try:
-            start = int(cursor) if cursor else 0
-            end = start + limit - 1
-            total = await self.redis.zcard(key)
-            records = await self.redis.zrange(key, start, end)
-            
-            result = []
-            for record in records:
-                data = json.loads(record)
-                pdns_record = PDNSRecord(
-                    rrname=data["rrname"],
-                    rrtype=data["rrtype"],
-                    rdata=data["rdata"],
-                    time_first=data["time_first"],
-                    time_last=data["time_last"],
-                    count=data["count"],
-                    sensor_id=data.get("sensor_id")
-                )
-                if rrtype is None or pdns_record.rrtype == rrtype:
-                    result.append(pdns_record)
-            
-            next_cursor = str(end + 1) if end < total - 1 else None
-            return result, next_cursor, total
-        except Exception as e:
-            logger.error({"event": "redis_get_record_failed", "key": key, "error": str(e)})
-            return [], None, 0
+    async def get_record(self, rrname: str, cursor: Optional[str] = None, limit: int = 200, rrtype: Optional[str] = None) -> Tuple[List[PDNSRecord], Optional[str], int]:
+        """Fetch records for a given rrname with optional rrtype filter and pagination."""
+        if not self.redis_pool:
+            await self.connect()
+
+        async with self.redis_pool.get() as redis:
+            try:
+                rrname = rrname.lower().rstrip(".")
+                query_key = f"r:{rrname}:{rrtype}" if rrtype else None
+
+                if query_key:
+                    rdata_set = await redis.smembers(query_key)
+                else:
+                    # If no rrtype, scan for all matching keys (e.g., r:example.com:*)
+                    cursor_scan = 0
+                    rdata_set = set()
+                    while True:
+                        cursor_scan, keys = await redis.scan(cursor_scan, match=f"r:{rrname}:*", count=100)
+                        for key in keys:
+                            rdata_set.update(await redis.smembers(key))
+                        if cursor_scan == 0:
+                            break
+
+                if not rdata_set:
+                    return [], None, 0
+
+                # Pagination
+                rdata_list = sorted(rdata_set)  # Sort for consistent ordering
+                start = int(cursor) if cursor else 0
+                end = min(start + limit, len(rdata_list))
+                total = len(rdata_list)
+                paginated_rdata = rdata_list[start:end]
+                next_cursor = str(end) if end < total else None
+
+                # Reconstruct PDNSRecord objects
+                records = []
+                rrtypes = [rrtype] if rrtype else [k.split(":")[-1] for k in keys] if not query_key else []
+                for rd in paginated_rdata:
+                    for rrt in rrtypes or [rrtype]:
+                        firstseen_key = f"s:{rrname}:{rd}:{rrt}"
+                        lastseen_key = f"l:{rrname}:{rd}:{rrt}"
+                        occ_key = f"o:{rrname}:{rd}:{rrt}"
+                        sensor_key = f"sensor:{rrname}:{rd}:{rrt}"
+
+                        time_first = await redis.get(firstseen_key) or 0
+                        time_last = await redis.get(lastseen_key) or 0
+                        count = await redis.get(occ_key) or 1
+                        sensor_id = await redis.get(sensor_key)
+
+                        records.append(PDNSRecord(
+                            rrname=rrname,
+                            rrtype=rrt,
+                            rdata=rd,
+                            time_first=int(time_first),
+                            time_last=int(time_last),
+                            count=int(count),
+                            sensor_id=sensor_id
+                        ))
+
+                return records, next_cursor, total
+            except Exception as e:
+                logger.error({"event": "redis_get_record_failed", "rrname": rrname, "error": str(e)})
+                return [], None, 0
 
     async def stream_records(self, key: str, chunk_size: int = 100) -> AsyncGenerator[PDNSRecord, None]:
         """Stream records for a given key in chunks."""
