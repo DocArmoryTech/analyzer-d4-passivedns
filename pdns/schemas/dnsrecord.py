@@ -49,9 +49,4 @@ class DNSRecord(BaseModel):
     def time_last_iso(self) -> str:
         return datetime.fromtimestamp(self.time_last).isoformat()
 
-class MetadataResponse(BaseModel):
-    data: list[DNSRecord]
-    total: int
-    next_cursor: str | None = None
-
 __all__ = ["TimeFormat", "ResponseFormat", "DNSRecord", "MetadataResponse"]

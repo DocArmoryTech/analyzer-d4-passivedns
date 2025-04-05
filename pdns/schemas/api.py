@@ -6,11 +6,6 @@ import json
 from datetime import datetime
 
 
-class MetadataResponse(BaseModel):
-    data: List[PDNSRecordSchema]
-    total: int
-    next_cursor: Optional[str] = None
-
 class Sensor(BaseModel):
     sensor_id: str
     count: int
