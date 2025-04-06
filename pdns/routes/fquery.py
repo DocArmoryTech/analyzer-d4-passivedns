@@ -5,7 +5,7 @@ from ..queries import get_record, get_associated_records
 from ..default.helpers import logger, get_remote_address
 from ..rrtypes import rrset, RRType  # Updated import
 from ..schemas import DNSRecord, MetadataResponse, TimeFormat, ResponseFormat
-from ..db.base import Database
+from ..db.manager import DatabaseManager
 import iptools
 
 router = APIRouter(prefix="/fquery", tags=["fquery"])
@@ -21,7 +21,7 @@ async def full_query(
     metadata: bool = Query(default=False, description="Wrap results in metadata object"),
     time_format: TimeFormat = Query(default=TimeFormat.unix, description="Timestamp format: unix (int) or iso (string)"),
     format: ResponseFormat = Query(default=ResponseFormat.ndjson, description="Response format: ndjson or json"),
-    db: Database = Depends(get_database),
+    db: DatabaseManager = Depends(get_database),
     auth=Depends(optional_auth)
 ):
     rrtype_value = rrtype.value if rrtype else None  # Access enum value
@@ -32,7 +32,7 @@ async def full_query(
     if iptools.ipv4.validate_ip(q) or iptools.ipv6.validate_ip(q):
         associated = await get_associated_records(db, q)
         for x in associated:
-            records, nc, tc = await get_record(db, x, cursor, limit, rrtype_value)
+            records, nc, tc = await db.get_record(db, x, cursor, limit, rrtype_value)
             result.extend(records)
             total += tc
             if (cursor is not None or total > limit) and nc:
@@ -41,7 +41,7 @@ async def full_query(
     else:
         associated = await get_associated_records(db, q)
         for x in associated:
-            records, nc, tc = await get_record(db, x.strip(), cursor, limit, rrtype_value)
+            records, nc, tc = await db.get_record(db, x.strip(), cursor, limit, rrtype_value)
             result.extend(records)
             total += tc
             if (cursor is not None or total > limit) and nc:

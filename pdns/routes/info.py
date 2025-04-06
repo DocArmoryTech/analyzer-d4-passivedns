@@ -5,6 +5,8 @@ from ..default.helpers import logger, get_remote_address
 from ..schemas import InfoResponse
 from ..db.manager import DatabaseManager 
 
+router = APIRouter(prefix="/info", tags=["info"])
+
 @router.get("", response_model=InfoResponse)
 @limiter.limit("100/minute")
 async def get_info(request: Request, db: DatabaseManager = Depends(get_database), auth=Depends(optional_auth)):
@@ -18,4 +20,3 @@ async def get_info(request: Request, db: DatabaseManager = Depends(get_database)
     except Exception as e:
         logger.error({"endpoint": "/info", "client_ip": get_remote_address(request), "error": str(e)})
         raise HTTPException(status_code=500, detail="Failed to retrieve info")
-router = APIRouter(prefix="/info", tags=["info"])

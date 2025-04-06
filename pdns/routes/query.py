@@ -22,18 +22,12 @@ async def query(
     db: DatabaseManager = Depends(get_database),
     auth=Depends(optional_auth)
 ):
+    rrtype_value = rrtype.value if rrtype else None
     try:
-        # Use numeric value from SupportedRRType (e.g., "1" for A)
-        rrtype_value = rrtype.value if rrtype else None
         records, next_cursor, total = await db.get_record(q.strip(), cursor, limit, rrtype_value)
     except Exception as e:
-        logger.error({
-            "endpoint": "/query",
-            "query": q,
-            "client_ip": get_remote_address(request),
-            "error": str(e)
-        })
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error({"endpoint": "/query", "query": q, "client_ip": get_remote_address(request), "error": str(e)})
+        raise HTTPException(status_code=500, detail="Database error")
 
     headers = {"X-Total-Count": str(total)}
     if total > limit:
