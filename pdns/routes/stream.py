@@ -20,7 +20,7 @@ async def stream(
     chunk_size: int = Query(default=100, ge=10, le=1000, description="Number of records per chunk"),
     rrtype: Optional[RRType] = Query(default=None, description="Filter by RR type (e.g., A, AAAA)"),  # Use RRType
     time_format: TimeFormat = Query(default=TimeFormat.unix, description="Timestamp format: unix (int) or iso (string)"),
-    db: Database = Depends(get_database),
+    db: DatabaseManager = Depends(get_database),
     auth=Depends(optional_auth)
 ):
     rrtype_value = rrtype.value if rrtype else None  # Access enum value
@@ -29,18 +29,19 @@ async def stream(
         record_count = 0
         try:
             if iptools.ipv4.validate_ip(q) or iptools.ipv6.validate_ip(q):
-                associated = await get_associated_records(db, q)
+                associated = await db.get_associated_records(q)
                 if not associated:
-                    yield "\n"
-                    return
+                    if not associated:
+                        yield f"{json.dumps({'message': 'No associated records found'})}\n"
+                        return
                 for x in associated:
-                    async for entry in stream_records(db, x, chunk_size, rrtype=rrtype_value):
+                    async for entry in db.stream_records(x, chunk_size, rrtype=rrtype_value):
                         record = DNSRecord.from_pdns(entry)
                         yield record.to_ndjson(time_format) + "\n"
                         record_count += 1
             else:
                 found = False
-                async for entry in stream_records(db, q.strip(), chunk_size, rrtype=rrtype_value):
+                async for entry in db.stream_records(q.strip(), chunk_size, rrtype=rrtype_value):
                     found = True
                     record = DNSRecord.from_pdns(entry)
                     yield record.to_ndjson(time_format) + "\n"

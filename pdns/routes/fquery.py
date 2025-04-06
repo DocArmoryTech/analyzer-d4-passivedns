@@ -30,18 +30,18 @@ async def full_query(
     next_cursor = None
     
     if iptools.ipv4.validate_ip(q) or iptools.ipv6.validate_ip(q):
-        associated = await get_associated_records(db, q)
+        associated = await db.get_associated_records(q)
         for x in associated:
-            records, nc, tc = await db.get_record(db, x, cursor, limit, rrtype_value)
+            records, nc, tc = await db.get_record(x, cursor, limit, rrtype_value)
             result.extend(records)
             total += tc
             if (cursor is not None or total > limit) and nc:
                 next_cursor = nc
                 break
     else:
-        associated = await get_associated_records(db, q)
+        associated = await get_associated_records(q)
         for x in associated:
-            records, nc, tc = await db.get_record(db, x.strip(), cursor, limit, rrtype_value)
+            records, nc, tc = await db.get_record(x.strip(), cursor, limit, rrtype_value)
             result.extend(records)
             total += tc
             if (cursor is not None or total > limit) and nc:
