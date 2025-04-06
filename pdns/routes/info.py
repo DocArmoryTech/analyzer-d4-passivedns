@@ -15,7 +15,7 @@ async def get_info(request: Request, db: DatabaseManager = Depends(get_database)
         stats = await db.get_stats() or {}
         sensors = await db.get_sensors() or []
         rsensors = [{"sensor_id": sensor_id, "count": int(count)} for sensor_id, count in sensors]
-        response = {"version": "1.0.0", "software": "analyzer-d4-passivedns", "stats": stats, "sensors": rsensors}
+        response = {"version": __version__, "software": "analyzer-d4-passivedns", "stats": stats, "sensors": rsensors}
         logger.info({"endpoint": "/info", "client_ip": get_remote_address(request), "status": 200})
         return response
     except Exception as e:
