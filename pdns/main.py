@@ -1,7 +1,5 @@
-# pdns/main.py
 from contextlib import asynccontextmanager
-import threading
-from time import sleep
+import asyncio
 from fastapi import FastAPI, Depends, Request, HTTPException
 from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -12,28 +10,28 @@ from .db.redis import RedisDatabase
 from .db.base import Database
 from .routes import info, query, fquery, stream
 from .db.manager import DatabaseManager
+from .ingestors.redis_queue import RedisQueueIngestor  # Adjust based on your actual ingestor path
+
+# Initialize limiter and token storage
 limiter = Limiter(key_func=get_remote_address)
 VALID_TOKENS = []
 
+# Load bearer tokens once at startup
 def load_bearer_tokens():
     global VALID_TOKENS
     try:
-        tokens_data = get_config("tokens")
+        tokens_data = get_config("tokens", quiet=True) or {}
         VALID_TOKENS = [t["value"] for t in tokens_data.get("tokens", [])]
-        logger.info(f"Loaded {len(VALID_TOKENS)} tokens from configuration")
+        logger.info(f"Loaded {len(VALID_TOKENS)} tokens at startup")
     except Exception as e:
-        logger.error(f"Failed to load tokens configuration: {str(e)}")
+        logger.error(f"Failed to load tokens: {str(e)}")
 
-def token_reload_thread():
-    while True:
-        load_bearer_tokens()
-        sleep(60)
-
+# Database backend configuration
 def get_database_backend() -> Database:
     try:
-        db_config = get_config("database")
-        db_type = db_config["type"]
-        config = db_config.get("config", {})
+        db_config = get_config("database", quiet=True) or {}
+        db_type = db_config.get("type", "redis")
+        config = db_config.get("config", {"host": "127.0.0.1", "port": 6400, "db": 0})
     except Exception as e:
         logger.warning(f"Failed to load database config: {str(e)}, defaulting to Redis")
         db_type, config = "redis", {"host": "127.0.0.1", "port": 6400, "db": 0}
@@ -43,24 +41,47 @@ def get_database_backend() -> Database:
     else:
         raise ValueError(f"Unknown database type: {db_type}")
 
+# DatabaseManager dependency
 async def get_database() -> DatabaseManager:
     db_backend = get_database_backend()
     db = DatabaseManager(db_backend)
     await db.initialize()
+    logger.info({"event": "database_initialized"})
     try:
         yield db
-    
     finally:
         await db.shutdown()
-        
+        logger.info({"event": "database_shutdown"})
+
+# Ingestor startup logic
+async def start_ingestors(db: DatabaseManager):
+    try:
+        # Example: Start RedisQueueIngestor (adjust parameters as needed)
+        ingestor = RedisQueueIngestor(db, "127.0.0.1:6400:analyzer:8:uuid")
+        asyncio.create_task(ingestor.ingest())
+        logger.info({"event": "ingestor_started", "type": "redis_queue"})
+    except Exception as e:
+        logger.error(f"Failed to start ingestor: {str(e)}")
+
+# Application lifespan
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    thread = threading.Thread(target=token_reload_thread, daemon=True)
-    thread.start()
-    logger.info({"event": "startup", "message": "Token reload thread started"})
+    # Load tokens once at startup
+    load_bearer_tokens()
+    logger.info({"event": "startup", "message": "Application starting"})
+
+    # Initialize DatabaseManager for ingestors
+    db = DatabaseManager(get_database_backend())
+    await db.initialize()
+    await start_ingestors(db)
+
     yield
+
+    # Cleanup
+    await db.shutdown()
     logger.info({"event": "shutdown", "message": "Application shutting down"})
 
+# FastAPI app setup
 app = FastAPI(
     title="Passive DNS Server API",
     description="A Passive DNS server compliant with Passive DNS - Common Output Format (draft-dulaunoy-dnsop-passive-dns-cof).",
@@ -78,6 +99,7 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(429, _rate_limit_exceeded_handler)
 
+# Authentication setup
 security_bearer = HTTPBearer(auto_error=False)
 DEFAULT_CONFIG = {
     "endpoints": {
@@ -88,16 +110,13 @@ DEFAULT_CONFIG = {
     }
 }
 
-try:
-    auth_config = get_config("auth")
-except Exception:
-    auth_config = DEFAULT_CONFIG
+auth_config = get_config("auth", quiet=True) or DEFAULT_CONFIG
 
 def get_auth_dependency():
     async def dynamic_auth(request: Request):
         path_parts = request.url.path.strip("/").split("/")
         endpoint = path_parts[0] if path_parts else ""
-        mode = auth_config["endpoints"].get(endpoint, {"auth": "none"})["auth"]
+        mode = auth_config.get("endpoints", {}).get(endpoint, {"auth": "none"})["auth"]
         if mode == "none":
             return None
         elif mode == "bearer":
@@ -114,10 +133,12 @@ def get_auth_dependency():
 
 optional_auth = get_auth_dependency()
 
+# Root redirect
 @app.get("/", include_in_schema=False)
 async def root():
     return RedirectResponse(url="/docs")
 
+# Include routers
 app.include_router(info.router)
 app.include_router(query.router)
 app.include_router(fquery.router)
