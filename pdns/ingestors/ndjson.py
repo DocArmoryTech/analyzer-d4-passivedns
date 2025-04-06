@@ -1,4 +1,4 @@
-# pdns/ingestors/ndjson_file.py
+import aiofiles
 import asyncio
 from ..default.helpers import logger
 from ..db.manager import DatabaseManager
@@ -35,4 +35,5 @@ class NDJSONFileIngestor(Ingestor):
                     await asyncio.sleep(0)
         except Exception as e:
             logger.error({"event": "ingest_error", "error": str(e)})
+        finally:
             self.running = False

@@ -35,4 +35,5 @@ class WebSocketIngestor(Ingestor):
             logger.info({"event": "ingestor_stop", "reason": "WebSocket connection closed"})
         except Exception as e:
             logger.error({"event": "ingest_error", "error": str(e)})
+        finally:
             self.running = False

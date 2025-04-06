@@ -1,4 +1,4 @@
-# pdns/ingestors/d4_file.py
+import aiofiles
 import asyncio
 from ..default.helpers import logger
 from ..default.exceptions import DNSParseError
@@ -35,4 +35,5 @@ class PDNSIngestor(Ingestor):
                     await asyncio.sleep(0)
         except Exception as e:
             logger.error({"event": "ingest_error", "error": str(e)})
+        finally:
             self.running = False

@@ -1,8 +1,9 @@
 from pypdns import PDNSRecord
 from ..default.helpers import logger
 from ..default.exceptions import DNSParseError
+from ..rrtypes import SupportedRRType
 
-def parse_line(self, line: str) -> PDNSRecord | None:
+def parse_line(line: str) -> PDNSRecord | None:
         """Parse a passivedns-formatted line into a PDNSRecord."""
         vkey = ['timestamp', 'ip-src', 'ip-dst', 'class', 'q', 'type', 'v', 'ttl', 'count']
         if not line or line == '':

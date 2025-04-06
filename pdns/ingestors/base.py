@@ -11,7 +11,7 @@ class Ingestor(ABC):
 
     @abstractmethod
     async def ingest(self) -> None:
-        """Ingest records using the DatabaseManager."""
+        """Start the ingestion process, processing records and storing them via DatabaseManager."""
         pass
 
     def stop(self) -> None:
