@@ -1,7 +1,0 @@
-{
-  "name": "log_alert",
-  "condition": {
-    "rrtype": "A"
-  },
-  "level": "info"
-}
