@@ -17,6 +17,7 @@ from .ingestors.json import JSONFileIngestor
 from .ingestors.ndjson import NDJSONFileIngestor
 from .ingestors.passivedns import PDNSIngestor
 from .ingestors.redis_queue import RedisQueueIngestor
+from .ingestors.zeek import ZeekIngestor
 from .db.manager import DatabaseManager
 from uvicorn import run as uvicorn_run
 
@@ -38,6 +39,9 @@ async def ingest_source(args: argparse.Namespace, db: DatabaseManager) -> None:
         elif args.redis_queue:
             ingestor = RedisQueueIngestor(db, args.redis_queue)
             source = args.redis_queue
+        elif args.zeek_file:
+            ingestor = ZeekIngestor(db, args.zeek_file)
+            source = args.zeek_file
         else:
             raise ValueError("No ingestion source specified")
 
@@ -55,23 +59,24 @@ async def main():
     parser = argparse.ArgumentParser(description="Passive DNS Server CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-    # Serve command (from my draft)
+    # Serve command
     serve_parser = subparsers.add_parser("serve", help="Start the FastAPI server")
     serve_parser.add_argument("--host", default="127.0.0.1", help="Host to bind the server to")
     serve_parser.add_argument("--port", default=8000, type=int, help="Port to bind the server to")
 
-    # Ingest command (your original logic)
+    # Ingest command
     ingest_parser = subparsers.add_parser("ingest", help="Import Passive DNS COF format from various sources")
     ingest_parser.add_argument("--ndjson", dest="ndjson_file", help="NDJSON file to import")
     ingest_parser.add_argument("--json", dest="json_file", help="JSON file to import")
     ingest_parser.add_argument("--websocket", dest="websocket_url", help="WebSocket stream URL")
     ingest_parser.add_argument("--pdns", dest="pdns_file", help="passivedns || separated file to import")
     ingest_parser.add_argument("--redis-queue", dest="redis_queue", help="Redis queue connection string (e.g., 'host:port:queue_name')")
+    ingest_parser.add_argument("--zeek", dest="zeek_file", help="Zeek DNS JSON log file to import")  
 
     args = parser.parse_args()
 
     # Load configurations
-    load_logging_config()  # Assuming this sets up logging
+    load_logging_config()
     logger.info({"event": "cli_start", "message": f"Starting CLI with command: {args.command or 'none'}"})
 
     if args.command == "serve":
@@ -79,7 +84,7 @@ async def main():
         uvicorn_run(app, host=args.host, port=args.port)
     elif args.command == "ingest":
         # Validate ingestion arguments
-        sources = [args.ndjson_file, args.json_file, args.websocket_url, args.pdns_file, args.redis_queue]
+        sources = [args.ndjson_file, args.json_file, args.websocket_url, args.pdns_file, args.redis_queue, args.zeek_file]
         if sum(1 for s in sources if s) > 1:
             logger.critical({"event": "cli_validation_error", "message": "Cannot specify more than one source"})
             print("Error: Cannot specify more than one source", file=sys.stderr)
@@ -89,9 +94,9 @@ async def main():
             sys.exit(0)
 
         # Load additional configurations
-        dnstype = load_dns_types()  # Load RR type mappings
-        excludesubstrings = get_config("exclude", {}).get("substrings", [])  # Exclusion list
-        expirations = get_config("expiration", {})  # Expiration settings
+        dnstype = load_dns_types()
+        excludesubstrings = get_config("exclude", {}).get("substrings", [])
+        expirations = get_config("expiration", {})
 
         # Get DatabaseManager instance
         db_gen = get_database()
@@ -99,7 +104,7 @@ async def main():
         try:
             await ingest_source(args, db)
         finally:
-            await db_gen.aclose()  # Properly close the async generator
+            await db_gen.aclose()
     else:
         parser.print_help()
         sys.exit(0)
