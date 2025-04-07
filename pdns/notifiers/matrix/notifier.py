@@ -1,18 +1,18 @@
+# pdns/notifiers/matrix/notifier.py
 from ..base import Notifier
 from ...default.helpers import logger
 import aiohttp
-from pypdns import PDNSRecord
+from .filters.base import NotificationFilter
 
 class MatrixNotifier(Notifier):
-    def __init__(self, config: dict, template_dir: str):
-        super().__init__(config, template_dir)
+    def __init__(self, config: dict, filter_instance: NotificationFilter, template_dir: str):
+        super().__init__(config, filter_instance, template_dir)
         self.homeserver_url = config["homeserver_url"].rstrip("/")
         self.access_token = config["access_token"]
         self.room_id = config["room_id"]
         self.endpoint = f"{self.homeserver_url}/_matrix/client/v3/rooms/{self.room_id}/send/m.room.message"
 
-    async def notify(self, record: PDNSRecord) -> None:
-        message = self.render_template(record)
+    async def notify(self, message: str) -> None:
         payload = {
             "msgtype": "m.text",
             "body": message,

@@ -1,15 +1,15 @@
+# pdns/notifiers/rocket/notifier.py
 from ..base import Notifier
 from ...default.helpers import logger
 import aiohttp
-from pypdns import PDNSRecord
+from .filters.base import NotificationFilter
 
 class RocketChatNotifier(Notifier):
-    def __init__(self, config: dict, template_dir: str):
-        super().__init__(config, template_dir)
+    def __init__(self, config: dict, filter_instance: NotificationFilter, template_dir: str):
+        super().__init__(config, filter_instance, template_dir)
         self.webhook_url = config["webhook_url"]
 
-    async def notify(self, record: PDNSRecord) -> None:
-        message = self.render_template(record)
+    async def notify(self, message: str) -> None:
         payload = {"text": message}
         async with aiohttp.ClientSession() as session:
             try:
