@@ -9,19 +9,19 @@ from .base import Ingestor
 from .utils import parse_line
 
 class RedisQueueIngestor(Ingestor):
-    def __init__(self, db_manager: DatabaseManager, queue_name: str) -> None:
+    def __init__(self, db_manager: DatabaseManager, redis_uri: str) -> None:
         super().__init__(db_manager)
-        self.queue_name: str = queue_name
+        self.redis_uri: str = redis_uri
         self.redis_client: Optional[aioredis.Redis] = None
 
     async def connect_redis(self) -> aioredis.Redis:
         try:
-            if self.queue_name.startswith("redis://"):
-                uri = self.queue_name
+            if self.redis_uri.startswith("redis://"):
+                uri = self.redis_uri
                 redis = await aioredis.create_redis_pool(uri, encoding="utf-8")
                 logger.info({"event": "redis_queue_connect", "uri": uri})
-            elif ":" in self.queue_name:
-                host, port, queue = self.queue_name.split(":", 2)
+            elif ":" in self.redis_uri:
+                host, port, queue = self.redis_uri.split(":", 2)
                 redis = await aioredis.create_redis_pool(
                     (host, int(port)),
                     encoding="utf-8",
@@ -31,7 +31,7 @@ class RedisQueueIngestor(Ingestor):
                 self.queue_key = queue
                 logger.info({"event": "redis_queue_connect", "host": host, "port": port, "queue": queue})
             else:
-                socket, queue = self.queue_name.rsplit(":", 1)
+                socket, queue = self.redis_uri.rsplit(":", 1)
                 redis = await aioredis.create_redis_pool(
                     socket,
                     encoding="utf-8",
@@ -42,16 +42,16 @@ class RedisQueueIngestor(Ingestor):
                 logger.info({"event": "redis_queue_connect", "socket": socket, "queue": queue})
             return redis
         except Exception as e:
-            logger.error({"event": "redis_queue_connect_error", "queue_name": self.queue_name, "error": str(e)})
+            logger.error({"event": "redis_queue_connect_error", "queue_name": self.redis_uri, "error": str(e)})
             raise
 
     async def ingest(self) -> None:
         self.running = True
-        logger.info({"event": "ingestor_start", "queue_name": self.queue_name})
+        logger.info({"event": "ingestor_start", "queue_name": self.redis_uri})
 
         try:
             self.redis_client = await self.connect_redis()
-            queue_key = getattr(self, "queue_key", self.queue_name)
+            queue_key = getattr(self, "queue_key", self.redis_uri)
 
             while self.running:
                 record_line = await self.redis_client.rpop(queue_key)
@@ -73,6 +73,6 @@ class RedisQueueIngestor(Ingestor):
             if self.redis_client:
                 self.redis_client.close()
                 await self.redis_client.wait_closed()
-                logger.info({"event": "redis_queue_disconnect", "queue_name": self.queue_name})
+                logger.info({"event": "redis_queue_disconnect", "queue_name": self.redis_uri})
             self.running = False
-            logger.info({"event": "ingestor_complete", "queue_name": self.queue_name})
+            logger.info({"event": "ingestor_complete", "queue_name": self.redis_uri})
