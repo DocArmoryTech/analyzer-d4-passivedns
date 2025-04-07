@@ -1,17 +1,16 @@
-# pdns/ingestors/base.py
 from abc import ABC, abstractmethod
 from ..db.manager import DatabaseManager
 
 class Ingestor(ABC):
     """Abstract base class for ingestors."""
 
-    def __init__(self, db_manager: DatabaseManager):
-        self.db_manager = db_manager
-        self.running = False
+    def __init__(self, db_manager: DatabaseManager) -> None:
+        self.db_manager: DatabaseManager = db_manager
+        self.running: bool = False
 
     @abstractmethod
     async def ingest(self) -> None:
-        """Start the ingestion process, processing records and storing them via DatabaseManager."""
+        """Asynchronously ingest records and store them using the provided DatabaseManager."""
         pass
 
     def stop(self) -> None:

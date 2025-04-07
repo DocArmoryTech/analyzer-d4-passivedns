@@ -3,15 +3,14 @@ import asyncio
 from ..default.helpers import logger
 from ..default.exceptions import DNSParseError
 from ..db.manager import DatabaseManager
-from pypdns import PDNSRecord  # Import PDNSRecord from pypdns
+from pypdns import PDNSRecord
 from .base import Ingestor
 from .utils import parse_line
 
-
 class PDNSIngestor(Ingestor):
-    def __init__(self, db_manager: DatabaseManager, file_path: str):
+    def __init__(self, db_manager: DatabaseManager, file_path: str) -> None:
         super().__init__(db_manager)
-        self.file_path = file_path
+        self.file_path: str = file_path
 
     async def ingest(self) -> None:
         self.running = True
@@ -33,6 +32,7 @@ class PDNSIngestor(Ingestor):
                     except DNSParseError as e:
                         logger.debug({"event": "ingest_error", "error": str(e), "line": l})
                     await asyncio.sleep(0)
+            logger.info({"event": "ingestor_complete", "file": self.file_path})
         except Exception as e:
             logger.error({"event": "ingest_error", "error": str(e)})
         finally:

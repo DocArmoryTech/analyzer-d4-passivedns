@@ -1,14 +1,15 @@
 import asyncio
+import json
+import aiofiles
 from ..default.helpers import logger
 from ..db.manager import DatabaseManager
 from pypdns import PDNSRecord
 from .base import Ingestor
-import json
 
 class JSONFileIngestor(Ingestor):
-    def __init__(self, db_manager: DatabaseManager, file_path: str):
+    def __init__(self, db_manager: DatabaseManager, file_path: str) -> None:
         super().__init__(db_manager)
-        self.file_path = file_path
+        self.file_path: str = file_path
 
     async def ingest(self) -> None:
         self.running = True
@@ -33,6 +34,7 @@ class JSONFileIngestor(Ingestor):
                     except (ValueError, TypeError) as e:
                         logger.debug({"event": "ingest_error", "error": str(e), "record": entry})
                     await asyncio.sleep(0)
+            logger.info({"event": "ingestor_complete", "file": self.file_path})
         except json.JSONDecodeError as e:
             logger.critical({"event": "ingest_error", "error": f"Invalid JSON in file {self.file_path}: {str(e)}"})
         except Exception as e:

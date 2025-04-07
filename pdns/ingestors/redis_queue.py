@@ -1,6 +1,6 @@
-# pdns/ingestors/redis_queue.py
 import asyncio
 import aioredis
+from typing import Optional
 from ..default.helpers import logger
 from ..default.exceptions import DNSParseError
 from ..db.manager import DatabaseManager
@@ -9,29 +9,18 @@ from .base import Ingestor
 from .utils import parse_line
 
 class RedisQueueIngestor(Ingestor):
-    def __init__(self, db_manager: DatabaseManager, queue_name: str):
-        """
-        Initialize the RedisQueueIngestor.
-
-        Args:
-            db_manager: The DatabaseManager instance for storing records.
-            queue_name: A Redis connection string (e.g., 'redis://host:port/db' or '/path/to/socket:queue_name').
-        """
+    def __init__(self, db_manager: DatabaseManager, queue_name: str) -> None:
         super().__init__(db_manager)
-        self.queue_name = queue_name
-        self.redis_client = None
+        self.queue_name: str = queue_name
+        self.redis_client: Optional[aioredis.Redis] = None
 
     async def connect_redis(self) -> aioredis.Redis:
-        """Establish a connection to the Redis queue instance."""
         try:
-            # Parse queue_name as a connection string
             if self.queue_name.startswith("redis://"):
-                # Handle redis://host:port/db?queue=queue_name format
                 uri = self.queue_name
                 redis = await aioredis.create_redis_pool(uri, encoding="utf-8")
                 logger.info({"event": "redis_queue_connect", "uri": uri})
             elif ":" in self.queue_name:
-                # Handle host:port:queue_name format
                 host, port, queue = self.queue_name.split(":", 2)
                 redis = await aioredis.create_redis_pool(
                     (host, int(port)),
@@ -42,7 +31,6 @@ class RedisQueueIngestor(Ingestor):
                 self.queue_key = queue
                 logger.info({"event": "redis_queue_connect", "host": host, "port": port, "queue": queue})
             else:
-                # Assume Unix socket path:queue_name
                 socket, queue = self.queue_name.rsplit(":", 1)
                 redis = await aioredis.create_redis_pool(
                     socket,
@@ -58,18 +46,17 @@ class RedisQueueIngestor(Ingestor):
             raise
 
     async def ingest(self) -> None:
-        """Ingest records from a Redis queue and store them via DatabaseManager."""
         self.running = True
         logger.info({"event": "ingestor_start", "queue_name": self.queue_name})
 
         try:
             self.redis_client = await self.connect_redis()
-            queue_key = getattr(self, "queue_key", self.queue_name)  # Use parsed queue name or full string
+            queue_key = getattr(self, "queue_key", self.queue_name)
 
             while self.running:
                 record_line = await self.redis_client.rpop(queue_key)
                 if record_line is None:
-                    await asyncio.sleep(1)  # Wait briefly if queue is empty
+                    await asyncio.sleep(1)
                     continue
                 l = record_line.decode("utf-8").strip()
                 try:
@@ -79,7 +66,7 @@ class RedisQueueIngestor(Ingestor):
                         logger.debug({"event": "ingest_record", "record": rdns.raw})
                 except DNSParseError as e:
                     logger.debug({"event": "ingest_error", "error": str(e), "line": l})
-                await asyncio.sleep(0)  # Yield control to event loop
+                await asyncio.sleep(0)
         except Exception as e:
             logger.error({"event": "ingest_error", "error": str(e)})
         finally:
@@ -88,3 +75,4 @@ class RedisQueueIngestor(Ingestor):
                 await self.redis_client.wait_closed()
                 logger.info({"event": "redis_queue_disconnect", "queue_name": self.queue_name})
             self.running = False
+            logger.info({"event": "ingestor_complete", "queue_name": self.queue_name})
