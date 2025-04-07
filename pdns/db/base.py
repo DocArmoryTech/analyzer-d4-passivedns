@@ -1,19 +1,17 @@
-# pdns/db/base.py
 from abc import ABC, abstractmethod
 from typing import Optional, List, Tuple, AsyncGenerator
-from pypdns import PDNSRecord  # Import from pypdns
+from pypdns import PDNSRecord
 
 class Database(ABC):
-    def __init__(self):
-        self.expirations = {}
+    """Abstract base class defining the database interface."""
 
     @abstractmethod
-    async def connect(self, pool_size: int = 10):
+    async def connect(self) -> None:
         """Establish a connection to the database."""
         pass
 
     @abstractmethod
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         """Close the database connection."""
         pass
 
@@ -23,8 +21,10 @@ class Database(ABC):
         pass
 
     @abstractmethod
-    async def get_record(self, q: str, cursor: str, limit: int, rrtype: str = None) -> Tuple[List[PDNSRecord], Optional[str], int]:
-        """Retrieve Passive DNS records for a given query name."""
+    async def get_record(
+        self, q: str, cursor: Optional[str], limit: int, rrtype: Optional[str] = None
+    ) -> Tuple[List[PDNSRecord], Optional[str], int]:
+        """Retrieve Passive DNS records for a given query name with pagination."""
         pass
 
     @abstractmethod
