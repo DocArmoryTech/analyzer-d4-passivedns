@@ -5,84 +5,58 @@ from .base import Notifier
 from .filters.base import NotificationFilter
 from .filters.string import StringFilter
 from .filters.dnsbl import DNSBLFilter
+from typing import List
 import asyncio
-import os
-import json
 import importlib
-import ipaddress
 
 class NotificationManager:
-    """Manages loading and triggering of notification handlers from notifier directories."""
-
-    def __init__(self):
-        """Load notifiers from subdirectories in pdns/notifiers."""
-        self.notifiers: list[Notifier] = []
-        notifiers_dir = "pdns/notifiers"
+    def __init__(self) -> None:
+        self.notifiers: List[Notifier] = []
         self._lock = asyncio.Lock()
         self._load_notifiers()
-    
-    def _create_filter(self, config: dict) -> NotificationFilter:
-        """Factory method to create appropriate filter based on config."""
-        filter_type = config.get("filter_type", "string")
-        if filter_type == "string":
-            return StringFilter(config.get("condition", {}))
-        elif filter_type == "dnsbl":
-            return DNSBLFilter(config.get("dnsbl_domain", "zen.spamhaus.org"))
-        else:
-            raise ValueError(f"Unknown filter type: {filter_type}")
-        
-    def _load_notifiers(self):
-        notifiers_dir = "pdns/notifiers"
-        if not os.path.exists(notifiers_dir):
-            logger.warning(f"Notifiers directory {notifiers_dir} does not exist")
+
+    def _load_notifiers(self) -> None:
+        # Fetch notifiers config using get_config
+        notifiers_config = get_config("notifiers", default=[])
+        if not isinstance(notifiers_config, list):
+            logger.error("Notifiers config must be a list; no notifiers loaded")
             return
 
-        for notifier_name in os.listdir(notifiers_dir):
-            notifier_path = os.path.join(notifier_path, notifier_name)
-            if not os.path.isdir(notifier_path) or notifier_name.startswith("__"):
-                continue
-
-            config_path = os.path.join(notifier_path, "config.json")
-            if not os.path.exists(config_path):
-                logger.warning(f"No config.json in {notifier_name}")
-                continue
-
+        for config in notifiers_config:
             try:
-                with open(config_path, "r") as f:
-                    config = json.load(f)
-                
-                if notifier_name == "log":
-                    config = get_config("notifiers", {}).get("log", {})
-                
-                module = importlib.import_module(f"pdns.notifiers.{notifier_name}")
-                notifier_class = getattr(module, f"{notifier_name.capitalize()}Notifier")
-                notifier = notifier_class(config, notifier_path)
-                filter_instance = self._create_filter(config)
-                self.notifiers.append((notifier, filter_instance))
+                notifier_type = config["type"]
+                module = importlib.import_module(f"pdns.notifiers.{notifier_type}.notifier")
+                notifier_class = getattr(module, f"{notifier_type.capitalize()}Notifier")
+                filter_instance = self._create_filter(config.get("filter", {}))
+                template_dir = f"pdns/notifiers/{notifier_type}"
+                notifier = notifier_class(config, filter_instance, template_dir)
+                self.notifiers.append(notifier)
                 logger.debug({"event": "notifier_loaded", "name": config.get("name")})
+            except KeyError as e:
+                logger.error(f"Missing required field in notifier config: {str(e)}")
+            except ImportError as e:
+                logger.error(f"Failed to import notifier module {notifier_type}: {str(e)}")
             except Exception as e:
-                logger.error(f"Failed to load notifier {notifier_name}: {str(e)}")
+                logger.error(f"Failed to load notifier {notifier_type}: {str(e)}")
 
-                
-    def matches(self, record: PDNSRecord, condition: dict) -> bool:
-        """Check if the record matches the given condition (exact match or IP network)."""
-        for key, value in condition.items():
-            record_value = getattr(record, key, None) if key != "rdata" else record.rdata[0] if isinstance(record.rdata, list) else record.rdata
-            if not record_value:
-                return False
-            if value.startswith("in:"):
-                try:
-                    network = ipaddress.ip_network(value[len("in:"):], strict=False)
-                    if key == "rdata" and ipaddress.ip_address(record_value) not in network:
-                        return False
-                except ValueError:
-                    return False
-            elif str(record_value) != value:
-                return False
-        return True
+    def _create_filter(self, filter_config: dict) -> NotificationFilter:
+        filter_type = filter_config.get("type", "string")
+        if filter_type == "string":
+            return StringFilter(filter_config.get("condition", {}))
+        elif filter_type == "dnsbl":
+            return DNSBLFilter(filter_config.get("dnsbl_domain", "zen.spamhaus.org"))
+        else:
+            raise ValueError(f"Unknown filter type: {filter_type}")
 
-    async def trigger(self, record: PDNSRecord) -> None:
-        """Trigger notifications for matching notifiers."""
-        for notifier in self.notifiers:
-            if self.matches(record, notifier.condition):
-                await notifier.notify(record)
+    async def check_record(self, record: PDNSRecord) -> None:
+        async with self._lock:
+            for notifier in self.notifiers:
+                if notifier.filter.evaluate(record):
+                    message = notifier.render_template(record)
+                    await notifier.notify(message)
+
+    async def initialize(self) -> None:
+        logger.info({"event": "notification_manager_initialized"})
+
+    async def shutdown(self) -> None:
+        logger.info({"event": "notification_manager_shutdown"})
