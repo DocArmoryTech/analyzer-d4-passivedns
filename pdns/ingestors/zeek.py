@@ -7,7 +7,7 @@ from ..db.manager import DatabaseManager
 from pypdns import PDNSRecord
 from .base import Ingestor
 
-class ZeekDNSIngestor(Ingestor):
+class ZeekIngestor(Ingestor):
     def __init__(self, db_manager: DatabaseManager, file_path: str) -> None:
         super().__init__(db_manager)
         self.file_path: str = file_path
