@@ -16,7 +16,7 @@ class Database(ABC):
         pass
 
     @abstractmethod
-    async def store_record(self, record: PDNSRecord) -> None:
+    async def store_record(self, record: PDNSRecord, expiration: Optional[int] = None) -> None:
         """Store a Passive DNS record in the database."""
         pass
 

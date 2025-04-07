@@ -15,8 +15,6 @@ class RedisDatabase(Database):
         self.config = get_config("redis", default={"host": "127.0.0.1", "port": 6379, "db": 0})
         self.db_number = self.config.get("db", 0)
         self.redis_pool = None
-        # Load expiration settings for records
-        self.expirations = get_config("generic", "expiration", quiet=True) or {}
 
     async def connect(self) -> None:
         """Establish a connection pool to Redis."""
@@ -67,8 +65,14 @@ class RedisDatabase(Database):
             await self.redis_pool.wait_closed()
             logger.info({"event": "redis_disconnect"})
 
-    async def store_record(self, record: PDNSRecord) -> None:
-        """Store a Passive DNS record in Redis, associating with sensor-id."""
+    async def store_record(self, record: PDNSRecord, expiration: Optional[int] = None) -> None:
+        """
+        Store a Passive DNS record in Redis with an optional expiration time.
+
+        Args:
+            record: The PDNSRecord to store.
+            expiration: Optional TTL in seconds for the record; if None, no expiration is set.
+        """
         if not self.redis_pool:
             await self.connect()
 
@@ -76,7 +80,6 @@ class RedisDatabase(Database):
         rrtype = str(record.rrtype) if record.rrtype.isdigit() else str(record.rrtype)
         rrname = record.rrname.lower().rstrip(".")
         rdata = record.rdata if isinstance(record.rdata, list) else [record.rdata]
-        expiration = self.expirations.get(rrtype)
 
         # Use connection from pool and pipeline for batch operations
         async with self.redis_pool.acquire() as redis:
@@ -93,7 +96,7 @@ class RedisDatabase(Database):
                     # Store relationships
                     pipe.sadd(query_key, rd)
                     pipe.sadd(value_key, rrname)
-                    if expiration:
+                    if expiration is not None:  # Only set TTL if expiration is provided
                         pipe.expire(query_key, expiration)
                         pipe.expire(value_key, expiration)
 
