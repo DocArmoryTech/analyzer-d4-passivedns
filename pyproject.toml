@@ -2,15 +2,13 @@
 name = "analyzer-d4-passivedns"
 version = "0.6.0"  # Bumped to reflect refactor
 description = "A Passive DNS server and analyzer for D4 network sensors, supporting multiple ingestion sources (CSV, NDJSON, JSON, WebSocket, Redis) and a FastAPI-based API."
-authors = [
-    { name = "D4 Project", email = "info@circl.lu" }
-]
+authors =  ["info@circl.lu"]
 license = "AGPL-3.0"
 readme = "README.md"
 packages = [{ include = "pdns" }]  # Explicitly include pdns/ as a package
 
 [tool.poetry.dependencies]
-python = ">=3.10"
+python = ">=3.10,<4.0"
 # Core dependencies for refactored project
 fastapi = "^0.115.0"  # Replaces tornado for API
 uvicorn = "^0.30.0"   # ASGI server for FastAPI
@@ -39,6 +37,10 @@ pdns-ingestion = "pdns.cli:main"  # Unified ingestion script
 validate-config = "tools.validate_config_files:main"  # New validation script
 
 # Removed pdns-import-cof (assumed merged into cli.py) and install-kvrocks (bash script not portable in Poetry)
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.5"
+pytest-asyncio = "^0.26.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]  # Updated to a stable Poetry version
