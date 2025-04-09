@@ -1,0 +1,31 @@
+# .gitlab-ci.yml
+image: python:3.11
+
+stages:
+  - test
+
+variables:
+  POETRY_CACHE_DIR: "$CI_PROJECT_DIR/.cache/poetry"
+
+cache:
+  paths:
+    - .cache/poetry
+
+before_script:
+  - python -V
+  - pip install poetry
+  - poetry --version
+  - poetry install --with dev  # Install runtime + dev dependencies
+
+test:
+  stage: test
+  services:
+    - redis:latest  # For RedisDatabase
+  script:
+    - poetry run pytest tests/ --junitxml=report.xml -v
+  artifacts:
+    when: always
+    paths:
+      - report.xml
+    reports:
+      junit: report.xml
