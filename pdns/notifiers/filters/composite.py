@@ -5,6 +5,7 @@ from typing import List
 
 
 class CompositeFilter(NotificationFilter):
+    type = 'composite'
     def __init__(self, filters: List[NotificationFilter], operator: str = "and"):
         self.filters = filters
         self.operator = operator.lower()

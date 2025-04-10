@@ -5,7 +5,9 @@
     "auth": "Authentication modes per endpoint. 'none' = no auth, 'bearer' = token required, 'openid' = not implemented.",
     "exclude": "List of domain substrings to exclude from ingestion/import (e.g., ['spamhaus.org']).",
     "expiration": "Expiration times (in seconds) for DNS records by numeric RR type (as strings).",
-    "rrset_supported": "List of supported RR types (as strings) for validation or filtering."
+    "rrset_supported": "List of supported RR types (as strings) for validation or filtering.",
+    "ingestors": "Array of ingestors. Each entry includes 'type' (e.g., 'redis_queue') and 'config'.",
+    "notifiers": "Array of notifiers. Each entry includes 'type' (e.g., 'log'), 'name', 'filter', and optional config."
   },
   "database": {
     "type": "redis",
@@ -16,14 +18,8 @@
     }
   },
   "tokens": [
-    {
-      "name": "admin_token",
-      "value": "supersecretadmintoken123"
-    },
-    {
-      "name": "user_token",
-      "value": "basicusertoken456"
-    }
+    {"name": "admin_token", "value": "supersecretadmintoken123"},
+    {"name": "user_token", "value": "basicusertoken456"}
   ],
   "auth": {
     "endpoints": {
@@ -33,24 +29,44 @@
       "stream": {"auth": "none"}
     }
   },
-  "ingestors": {
-    "redis_queue": {
-      "connection": "127.0.0.1:6379:analyzer:8:uuid"
-    }
-  },
   "exclude": ["spamhaus.org", "asn.cymru.com"],
   "expiration": {
     "16": 24000,
     "99": 26000
   },
   "rrset_supported": ["1", "2", "5", "15", "16", "28", "33", "46"],
-  "notifiers": {
-    "log": {
+  "ingestors": [
+    {
+      "type": "redis_queue",
+      "config": {"connection": "127.0.0.1:6379:analyzer:8:uuid"}
+    },
+    {
+      "type": "websocket",
+      "config": {"url": "wss://example.com/dns-feed", "retry_interval": 10}
+    },
+    {
+      "type": "ndjson_file",
+      "config": {"file_path": "/path/to/dns_records.ndjson"}
+    }
+  ],
+  "notifiers": [
+    {
+      "type": "log",
       "name": "log_alert",
-      "condition": {
-        "rrtype": "A"
+      "filter": {
+        "type": "string",
+        "condition": {"rrtype": "A"}
       },
       "level": "info"
+    },
+    {
+      "type": "email",
+      "name": "email_alert",
+      "filter": {
+        "type": "dnsbl",
+        "dnsbl_domain": "zen.spamhaus.org"
+      },
+      "to": "admin@example.com"
     }
-  }
+  ]
 }

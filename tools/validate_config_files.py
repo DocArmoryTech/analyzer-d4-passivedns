@@ -1,202 +1,169 @@
 #!/usr/bin/env python3
-# ./tools/validate_config_files.py
-"""Validate configuration files for analyzer-d4-passivedns."""
+"""Validate and update configuration files for analyzer-d4-passivedns."""
 
 import json
 import logging
-import sys
+import argparse
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
+
+# Setup logging
+logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
+logger = logging.getLogger("validate_config")
 
 # Assuming PDNS_HOME is set, or default to project root
 try:
     from pdns.default.helpers import get_homedir
-
     CONFIG_DIR = get_homedir() / "config"
 except ImportError:
     # Fallback for standalone execution
     CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
 
-# Setup basic logging
-logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
-logger = logging.getLogger("validate_config")
+def validate_generic_config_file() -> bool:
+    """Validate generic.json against generic.json.sample."""
+    sample_path = CONFIG_DIR / "generic.json.sample"
+    user_path = CONFIG_DIR / "generic.json"
 
-# Expected configuration schemas
-CONFIG_SCHEMAS = {
-    "generic": {
-        "required": ["exclude", "expiration", "rrset_supported"],
-        "defaults": {
-            "exclude": ["spamhaus.org", "asn.cymru.com"],
-            "expiration": {},
-            "rrset_supported": ["1", "2", "5", "15", "16", "28", "33", "46"],
-            "notifiers": {},
-        },
-        "validate": lambda config: (
-            isinstance(config["exclude"], list)
-            and all(isinstance(s, str) for s in config["exclude"])
-            and isinstance(config["expiration"], dict)
-            and all(
-                k.isdigit() and isinstance(v, int)
-                for k, v in config["expiration"].items()
-            )
-            and isinstance(config["rrset_supported"], list)
-            and all(isinstance(t, str) for t in config["rrset_supported"])
-        ),
-    },
-    "rrtypes": {
-        "required": [],
-        "defaults": {},
-        "validate": lambda config: (
-            isinstance(config, list)
-            and all(
-                isinstance(r, dict) and "type" in r and "value" in r for r in config
-            )
-        ),
-    },
-    "tokens": {
-        "required": ["tokens"],
-        "defaults": {"tokens": []},
-        "validate": lambda config: (
-            isinstance(config["tokens"], list)
-            and all(
-                isinstance(t, dict) and "value" in t and isinstance(t["value"], str)
-                for t in config["tokens"]
-            )
-        ),
-    },
-    "alerts": {
-        "required": ["alerts"],
-        "defaults": {"alerts": []},
-        "validate": lambda config: (
-            isinstance(config["alerts"], list)
-            and all(
-                isinstance(a, dict)
-                and "name" in a
-                and "condition" in a
-                and "method" in a
-                for a in config["alerts"]
-            )
-        ),
-    },
-    "database": {
-        "required": ["type", "config"],
-        "defaults": {
-            "type": "redis",
-            "config": {"host": "127.0.0.1", "port": 6400, "db": 0},
-        },
-        "validate": lambda config: (
-            isinstance(config["type"], str)
-            and config["type"] in ["redis"]
-            and isinstance(config["config"], dict)
-            and "host" in config["config"]
-            and "port" in config["config"]
-        ),
-    },
-    "auth": {
-        "required": ["endpoints"],
-        "defaults": {
-            "endpoints": {
-                "info": {"auth": "none"},
-                "query": {"auth": "none"},
-                "fquery": {"auth": "none"},
-                "stream": {"auth": "none"},
-            }
-        },
-        "validate": lambda config: (
-            isinstance(config["endpoints"], dict)
-            and all(
-                isinstance(v, dict)
-                and "auth" in v
-                and v["auth"] in ["none", "bearer", "openid"]
-                for v in config["endpoints"].values()
-            )
-        ),
-    },
-    "logging": {
-        "required": ["version", "handlers", "loggers"],
-        "defaults": {
-            "version": 1,
-            "disable_existing_loggers": False,
-            "formatters": {
-                "verbose": {
-                    "format": "%(levelname)s %(asctime)s %(name)s %(module)s:%(lineno)s %(message)s"
-                }
-            },
-            "handlers": {
-                "console": {
-                    "level": "INFO",
-                    "class": "logging.StreamHandler",
-                    "formatter": "verbose",
-                }
-            },
-            "loggers": {
-                "pdns": {"level": "INFO", "handlers": ["console"], "propagate": False}
-            },
-        },
-        "validate": lambda config: (
-            isinstance(config["version"], int)
-            and isinstance(config["handlers"], dict)
-            and isinstance(config["loggers"], dict)
-        ),
-    },
-}
+    # Load sample config
+    if not sample_path.exists():
+        raise FileNotFoundError(f"Sample config not found: {sample_path}")
+    with sample_path.open() as f:
+        sample_config = json.load(f)
 
+    # Check documentation in _notes
+    for key in sample_config.keys():
+        if key == "_notes":
+            continue
+        if key not in sample_config["_notes"]:
+            raise ValueError(f"Documentation missing for '{key}' in {sample_path}")
 
-def validate_config_file(file_name: str) -> Dict[str, Any]:
-    """Validate a single configuration file and return its contents with defaults applied."""
-    path = CONFIG_DIR / f"{file_name}.json"
-    schema = CONFIG_SCHEMAS.get(file_name, {})
-    config = {}
+    # If user config doesn’t exist, create it from sample
+    if not user_path.exists():
+        with user_path.open("w") as fw:
+            json.dump(sample_config, fw, indent=2, sort_keys=True)
+        logger.info(f"Created {user_path} from sample since it was missing")
+        return True
 
-    if not path.exists():
-        logger.warning(f"Missing config file: {path}. Checking for sample...")
-        sample_path = CONFIG_DIR / f"{file_name}.json.sample"
-        if sample_path.exists():
-            with sample_path.open() as f:
-                config = json.load(f)
-            logger.info(f"Using sample config from {sample_path}")
-        else:
-            logger.error(f"No config or sample found for {file_name}. Using defaults.")
-            config = schema.get("defaults", {})
-    else:
-        with path.open() as f:
-            config = json.load(f)
+    # Load user config
+    with user_path.open() as f:
+        user_config = json.load(f)
 
-    # Apply defaults for missing required keys
-    for key in schema.get("required", []):
-        if key not in config:
-            if key in schema["defaults"]:
-                config[key] = schema["defaults"][key]
-                logger.info(f"Added default value for {key} in {file_name}")
-            else:
-                logger.error(
-                    f"Required key {key} missing in {file_name} and no default available"
-                )
-                sys.exit(1)
+    # Validate keys and types recursively
+    def validate_structure(sample: Any, user: Any, path: str = "") -> None:
+        if isinstance(sample, dict):
+            for key, sample_value in sample.items():
+                if key == "_notes":
+                    continue
+                user_value = user.get(key)
+                current_path = f"{path}.{key}" if path else key
 
-    # Validate structure
-    if "validate" in schema and not schema["validate"](config):
-        logger.error(f"Invalid structure in {file_name}.json: {config}")
-        sys.exit(1)
+                if user_value is None:
+                    logger.warning(f"Entry missing in user config at '{current_path}'. Will default to: {sample_value}")
+                    continue
 
-    return config
+                if type(user_value) != type(sample_value):
+                    raise ValueError(
+                        f"Invalid type for '{current_path}'. Got: {type(user_value)} ({user_value}), "
+                        f"expected: {type(sample_value)} ({sample_value})"
+                    )
 
+                # Recursively validate nested structures
+                if isinstance(sample_value, (dict, list)):
+                    validate_structure(sample_value, user_value, current_path)
+
+        elif isinstance(sample, list):
+            if not isinstance(user, list):
+                raise ValueError(f"Expected a list at '{path}', got: {type(user)} ({user})")
+            if not user and sample:  # Allow empty lists if sample isn’t empty
+                logger.warning(f"List at '{path}' is empty in user config, sample has: {sample}")
+            # For simplicity, don’t enforce list item types unless critical (e.g., tokens)
+            if path == "tokens" and user:
+                for u, s in zip(user, sample):
+                    validate_structure(s, u, path)
+
+    # Check sample keys are in user config
+    validate_structure(sample_config, user_config)
+
+    # Check for extra keys in user config not in sample
+    for key in user_config.keys():
+        if key not in sample_config:
+            raise ValueError(f"'{key}' is missing in {sample_path}. Compare with {user_path}")
+
+    return True
+
+def update_user_config() -> bool:
+    """Update generic.json with missing entries from generic.json.sample."""
+    sample_path = CONFIG_DIR / "generic.json.sample"
+    user_path = CONFIG_DIR / "generic.json"
+
+    # Load configs
+    with sample_path.open() as f:
+        sample_config = json.load(f)
+    if not user_path.exists():
+        with user_path.open("w") as fw:
+            json.dump(sample_config, fw, indent=2, sort_keys=True)
+        logger.info(f"Created {user_path} from sample")
+        return True
+
+    with user_path.open() as f:
+        user_config = json.load(f)
+
+    has_new_entry = False
+
+    def update_structure(sample: dict, user: dict, path: str = "") -> None:
+        nonlocal has_new_entry
+        for key, sample_value in sample.items():
+            if key == "_notes":
+                continue
+            current_path = f"{path}.{key}" if path else key
+            if key not in user:
+                logger.info(f"'{current_path}' missing in user config, adding: {sample_value}")
+                logger.info(f"Description: {sample_config['_notes'].get(key, 'No description')}")
+                user[key] = sample_value
+                has_new_entry = True
+            elif isinstance(sample_value, dict):
+                if not isinstance(user[key], dict):
+                    logger.info(f"Replacing invalid type at '{current_path}' with: {sample_value}")
+                    user[key] = sample_value
+                    has_new_entry = True
+                else:
+                    update_structure(sample_value, user[key], current_path)
+
+    update_structure(sample_config, user_config)
+
+    if has_new_entry:
+        with user_path.open("w") as fw:
+            json.dump(user_config, fw, indent=2, sort_keys=True)
+        logger.info(f"Updated {user_path} with new entries")
+
+    return has_new_entry
 
 def main():
-    """Validate all configuration files."""
-    logger.info("Starting configuration validation...")
-    for config_name in CONFIG_SCHEMAS:
-        try:
-            config = validate_config_file(config_name)
-            logger.info(f"Validated {config_name}.json: {config}")
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse {config_name}.json: {e}")
-            sys.exit(1)
-        except Exception as e:
-            logger.error(f"Error validating {config_name}.json: {e}")
-            sys.exit(1)
-    logger.info("All configuration files validated successfully.")
+    """Validate or update configuration files based on arguments."""
+    parser = argparse.ArgumentParser(description="Check and update config files for analyzer-d4-passivedns.")
+    parser.add_argument("--check", action="store_true", help="Check if generic.json matches generic.json.sample")
+    parser.add_argument("--update", action="store_true", help="Update generic.json with missing entries from sample")
+    args = parser.parse_args()
 
+    if not args.check and not args.update:
+        parser.print_help()
+        sys.exit(1)
+
+    if args.check:
+        try:
+            if validate_generic_config_file():
+                logger.info(f"The entries in {CONFIG_DIR / 'generic.json'} are valid.")
+        except Exception as e:
+            logger.error(f"Validation failed: {e}")
+            sys.exit(1)
+
+    if args.update:
+        try:
+            if not update_user_config():
+                logger.info(f"No updates needed in {CONFIG_DIR / 'generic.json'}.")
+        except Exception as e:
+            logger.error(f"Update failed: {e}")
+            sys.exit(1)
 
 if __name__ == "__main__":
     main()

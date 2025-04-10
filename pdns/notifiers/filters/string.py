@@ -5,6 +5,8 @@ from pypdns import PDNSRecord
 class StringFilter(NotificationFilter):
     """Filter based on exact string matching of record attributes."""
 
+    type = 'string'
+
     def __init__(self, condition: dict):
         self.condition = condition
 

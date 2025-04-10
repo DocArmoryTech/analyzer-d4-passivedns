@@ -7,6 +7,8 @@ import asyncio
 class DNSBLFilter(NotificationFilter):
     """Filter based on DNSBL (DNS Blacklist) lookup."""
 
+    type = 'dnsbl'
+    
     def __init__(self, dnsbl_domain: str):
         self.dnsbl_domain = dnsbl_domain
 
