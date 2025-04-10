@@ -5,10 +5,12 @@ from ..default.helpers import logger
 from ..default.exceptions import DNSParseError
 from ..db.manager import DatabaseManager
 from pypdns import PDNSRecord
-from .base import Ingestor
+from .base import DaemonIngestor
 from .utils import parse_line
 
-class RedisQueueIngestor(Ingestor):
+class RedisQueueIngestor(DaemonIngestor):
+    type = "d4redis"  # Class variable defining the ingestor type
+ 
     def __init__(self, db_manager: DatabaseManager, redis_uri: str) -> None:
         super().__init__(db_manager)
         self.redis_uri: str = redis_uri

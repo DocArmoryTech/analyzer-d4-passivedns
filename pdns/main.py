@@ -7,10 +7,13 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from .default.helpers import logger, get_config
 from .db.redis import RedisDatabase
+from .ingestors import DaemonIngestor
 from .db.base import Database
 from .routes import info, query, fquery, stream
+import importlib
+import inspect
 from .db.manager import DatabaseManager
-from .ingestors.redis_queue import RedisQueueIngestor  # Adjust based on your actual ingestor path
+
 
 # Initialize limiter and token storage
 limiter = Limiter(key_func=get_remote_address)
@@ -53,15 +56,48 @@ async def get_database() -> DatabaseManager:
         await db.shutdown()
         logger.info({"event": "database_shutdown"})
 
-# Ingestor startup logic
 async def start_ingestors(db: DatabaseManager):
-    try:
-        # Example: Start RedisQueueIngestor (adjust parameters as needed)
-        ingestor = RedisQueueIngestor(db, "127.0.0.1:6400:analyzer:8:uuid")
-        asyncio.create_task(ingestor.ingest())
-        logger.info({"event": "ingestor_started", "type": "redis_queue"})
-    except Exception as e:
-        logger.error(f"Failed to start ingestor: {str(e)}")
+    """Start zero or more ingestors based on configuration."""
+    ingestors_config = get_config("ingestors", quiet=True) or {}
+    
+    if not ingestors_config:
+        logger.info({"event": "ingestors_skipped", "message": "No ingestors configured"})
+        return
+    
+    # Dynamically load all ingestor classes from the ingestors module
+    ingestor_module = importlib.import_module(".ingestors", package="pdns")
+    ingestor_classes = {
+        cls.type: cls
+        for name, cls in inspect.getmembers(ingestor_module, inspect.isclass)
+        if hasattr(cls, "type") and issubclass(cls, DaemonIngestor) and cls != DaemonIngestor
+    }
+    
+    for ingestor_name, config in ingestors_config.items():
+        try:
+            ingestor_type = config.get("type")
+            if not ingestor_type:
+                raise ValueError("Missing 'type' field in ingestor config")
+            
+            ingestor_class = ingestor_classes.get(ingestor_type)
+            if not ingestor_class:
+                raise ValueError(f"Unknown ingestor type: {ingestor_type}")
+            
+            # Instantiate and start the ingestor
+            ingestor_config = config.get("config", {})
+            ingestor = ingestor_class(db, **ingestor_config)
+            asyncio.create_task(ingestor.ingest())
+            logger.info({
+                "event": "ingestor_started",
+                "name": ingestor_name,
+                "type": ingestor_type,
+                "config": ingestor_config
+            })
+        except Exception as e:
+            logger.error({
+                "event": "ingestor_start_failed",
+                "name": ingestor_name,
+                "error": str(e)
+            })
 
 # Application lifespan
 @asynccontextmanager

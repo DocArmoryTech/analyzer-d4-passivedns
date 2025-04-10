@@ -1,10 +1,43 @@
 {
   "_notes": {
-    "exclude.substrings": "List of domain substrings to exclude from ingestion/import (e.g., ['spamhaus.org']). Default: ['spamhaus.org', 'asn.cymru.com'].",
-    "expiration": "Expiration times (in seconds) for DNS records by numeric type. Keys are DNS type numbers as strings.",
-    "expiration.16": "Expiration time for TXT records (type 16), e.g., 24000 seconds (~6.67 hours).",
-    "expiration.99": "Expiration time for SPF records (type 99), e.g., 26000 seconds (~7.22 hours).",
-},
+    "database": "Database backend configuration. 'type' specifies the backend (e.g., 'redis'), 'config' provides connection details.",
+    "tokens": "List of bearer tokens for authentication. Each token has a 'value' and optional metadata like 'name'.",
+    "auth": "Authentication modes per endpoint. 'none' = no auth, 'bearer' = token required, 'openid' = not implemented.",
+    "exclude": "List of domain substrings to exclude from ingestion/import (e.g., ['spamhaus.org']).",
+    "expiration": "Expiration times (in seconds) for DNS records by numeric RR type (as strings).",
+    "rrset_supported": "List of supported RR types (as strings) for validation or filtering."
+  },
+  "database": {
+    "type": "redis",
+    "config": {
+      "host": "127.0.0.1",
+      "port": 6379,
+      "db": 0
+    }
+  },
+  "tokens": [
+    {
+      "name": "admin_token",
+      "value": "supersecretadmintoken123"
+    },
+    {
+      "name": "user_token",
+      "value": "basicusertoken456"
+    }
+  ],
+  "auth": {
+    "endpoints": {
+      "info": {"auth": "none"},
+      "query": {"auth": "bearer"},
+      "fquery": {"auth": "bearer"},
+      "stream": {"auth": "none"}
+    }
+  },
+  "ingestors": {
+    "redis_queue": {
+      "connection": "127.0.0.1:6379:analyzer:8:uuid"
+    }
+  },
   "exclude": ["spamhaus.org", "asn.cymru.com"],
   "expiration": {
     "16": 24000,

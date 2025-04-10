@@ -4,9 +4,11 @@ import json
 from ..default.helpers import logger
 from ..db.manager import DatabaseManager
 from pypdns import PDNSRecord
-from .base import Ingestor
+from .base import DaemonIngestor
 
 class WebSocketIngestor(Ingestor):
+    type = "websocket"  # Class variable defining the ingestor type
+
     def __init__(self, db_manager: DatabaseManager, ws_url: str) -> None:
         super().__init__(db_manager)
         self.ws_url: str = ws_url

@@ -16,3 +16,7 @@ class Ingestor(ABC):
     def stop(self) -> None:
         """Stop the ingestor."""
         self.running = False
+
+class DaemonIngestor(Ingestor, ABC):
+    """Base class for ingestors that run continuously with the server."""
+    type: str  # Required class variable for daemon ingestors
