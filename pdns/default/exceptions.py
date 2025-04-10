@@ -1,3 +1,6 @@
+class MissingEnv(Exception):
+    pass
+
 class RedisConnectionError(Exception):
     """Raised when a Redis connection fails."""
 
