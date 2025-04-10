@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Optional, List, Tuple, AsyncGenerator
 from pypdns import PDNSRecord
 
+
 class Database(ABC):
     """Abstract base class defining the database interface."""
 
@@ -16,7 +17,9 @@ class Database(ABC):
         pass
 
     @abstractmethod
-    async def store_record(self, record: PDNSRecord, expiration: Optional[int] = None) -> None:
+    async def store_record(
+        self, record: PDNSRecord, expiration: Optional[int] = None
+    ) -> None:
         """Store a Passive DNS record in the database."""
         pass
 
@@ -33,7 +36,9 @@ class Database(ABC):
         pass
 
     @abstractmethod
-    async def stream_records(self, q: str, chunk_size: int) -> AsyncGenerator[PDNSRecord, None]:
+    async def stream_records(
+        self, q: str, chunk_size: int
+    ) -> AsyncGenerator[PDNSRecord, None]:
         """Stream Passive DNS records as PDNSRecord objects."""
         pass
 

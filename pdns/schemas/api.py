@@ -10,11 +10,13 @@ class Sensor(BaseModel):
     sensor_id: str
     count: int
 
+
 class InfoResponse(BaseModel):
     version: str
     software: str
     stats: int
     sensors: List[Sensor]
+
 
 class MetadataResponse(BaseModel):
     data: List[DNSRecord]

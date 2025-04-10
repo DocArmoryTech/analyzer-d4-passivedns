@@ -12,8 +12,11 @@ import requests
 from pathlib import Path
 
 # URL of the IANA DNS RR types CSV
-IANA_URL = "https://www.iana.org/assignments/dns-parameters/dns-parameters-4.csv" #20/03/2025
+IANA_URL = (
+    "https://www.iana.org/assignments/dns-parameters/dns-parameters-4.csv"  # 20/03/2025
+)
 OUTPUT_FILE = Path(__file__).parent.parent / "config" / "rrtypes.json"
+
 
 def fetch_and_convert():
     """Fetch the IANA CSV and convert it to JSON."""
@@ -34,7 +37,7 @@ def fetch_and_convert():
                 "Value": row.get("Value", "").strip(),
                 "Meaning": row.get("Meaning", "").strip(),
                 "Template": row.get("Template", "").strip(),
-                "Registration Date": row.get("Registration Date", "").strip()
+                "Registration Date": row.get("Registration Date", "").strip(),
             }
             # Skip invalid rows (e.g., missing Type or Value)
             if record["Type"] and record["Value"].isdigit():
@@ -52,6 +55,7 @@ def fetch_and_convert():
     except Exception as e:
         print(f"Error processing CSV or writing JSON: {e}")
         exit(1)
+
 
 if __name__ == "__main__":
     fetch_and_convert()

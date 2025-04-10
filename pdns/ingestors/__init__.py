@@ -6,7 +6,7 @@ from .ndjson import NDJSONFileIngestor
 from .json import JSONFileIngestor
 from .redis_queue import RedisQueueIngestor
 from .websocket import WebSocketIngestor
-from .zeek import ZeekIngestor  
+from .zeek import ZeekIngestor
 
 __all__ = [
     "Ingestor",
@@ -17,5 +17,5 @@ __all__ = [
     "JSONFileIngestor",
     "RedisQueueIngestor",
     "WebSocketIngestor",
-    "ZeekIngestor"  
+    "ZeekIngestor",
 ]

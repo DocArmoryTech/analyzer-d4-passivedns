@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from ..db.manager import DatabaseManager
 
+
 class Ingestor(ABC):
     """Abstract base class for ingestors."""
 
@@ -17,6 +18,8 @@ class Ingestor(ABC):
         """Stop the ingestor."""
         self.running = False
 
+
 class DaemonIngestor(Ingestor, ABC):
     """Base class for ingestors that run continuously with the server."""
+
     type: str  # Required class variable for daemon ingestors

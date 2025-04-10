@@ -9,6 +9,7 @@ from typing import List
 import asyncio
 import importlib
 
+
 class NotificationManager:
     def __init__(self) -> None:
         self.notifiers: List[Notifier] = []
@@ -25,8 +26,12 @@ class NotificationManager:
         for config in notifiers_config:
             try:
                 notifier_type = config["type"]
-                module = importlib.import_module(f"pdns.notifiers.{notifier_type}.notifier")
-                notifier_class = getattr(module, f"{notifier_type.capitalize()}Notifier")
+                module = importlib.import_module(
+                    f"pdns.notifiers.{notifier_type}.notifier"
+                )
+                notifier_class = getattr(
+                    module, f"{notifier_type.capitalize()}Notifier"
+                )
                 filter_instance = self._create_filter(config.get("filter", {}))
                 template_dir = f"pdns/notifiers/{notifier_type}"
                 notifier = notifier_class(config, filter_instance, template_dir)
@@ -35,7 +40,9 @@ class NotificationManager:
             except KeyError as e:
                 logger.error(f"Missing required field in notifier config: {str(e)}")
             except ImportError as e:
-                logger.error(f"Failed to import notifier module {notifier_type}: {str(e)}")
+                logger.error(
+                    f"Failed to import notifier module {notifier_type}: {str(e)}"
+                )
             except Exception as e:
                 logger.error(f"Failed to load notifier {notifier_type}: {str(e)}")
 

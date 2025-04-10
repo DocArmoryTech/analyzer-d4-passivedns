@@ -21,6 +21,7 @@ from .ingestors.zeek import ZeekIngestor
 from .db.manager import DatabaseManager
 from uvicorn import run as uvicorn_run
 
+
 async def ingest_source(args: argparse.Namespace, db: DatabaseManager) -> None:
     """Handle ingestion based on provided source argument."""
     try:
@@ -55,38 +56,74 @@ async def ingest_source(args: argparse.Namespace, db: DatabaseManager) -> None:
         print(f"Error: {str(e)}", file=sys.stderr)
         sys.exit(1)
 
+
 async def main():
     parser = argparse.ArgumentParser(description="Passive DNS Server CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Serve command
     serve_parser = subparsers.add_parser("serve", help="Start the FastAPI server")
-    serve_parser.add_argument("--host", default="127.0.0.1", help="Host to bind the server to")
-    serve_parser.add_argument("--port", default=8000, type=int, help="Port to bind the server to")
+    serve_parser.add_argument(
+        "--host", default="127.0.0.1", help="Host to bind the server to"
+    )
+    serve_parser.add_argument(
+        "--port", default=8000, type=int, help="Port to bind the server to"
+    )
 
     # Ingest command
-    ingest_parser = subparsers.add_parser("ingest", help="Import Passive DNS COF format from various sources")
-    ingest_parser.add_argument("--ndjson", dest="ndjson_file", help="NDJSON file to import")
+    ingest_parser = subparsers.add_parser(
+        "ingest", help="Import Passive DNS COF format from various sources"
+    )
+    ingest_parser.add_argument(
+        "--ndjson", dest="ndjson_file", help="NDJSON file to import"
+    )
     ingest_parser.add_argument("--json", dest="json_file", help="JSON file to import")
-    ingest_parser.add_argument("--websocket", dest="websocket_url", help="WebSocket stream URL")
-    ingest_parser.add_argument("--pdns", dest="pdns_file", help="passivedns || separated file to import")
-    ingest_parser.add_argument("--redis-queue", dest="redis_queue", help="Redis queue connection string (e.g., 'host:port:queue_name')")
-    ingest_parser.add_argument("--zeek", dest="zeek_file", help="Zeek DNS JSON log file to import")  
+    ingest_parser.add_argument(
+        "--websocket", dest="websocket_url", help="WebSocket stream URL"
+    )
+    ingest_parser.add_argument(
+        "--pdns", dest="pdns_file", help="passivedns || separated file to import"
+    )
+    ingest_parser.add_argument(
+        "--redis-queue",
+        dest="redis_queue",
+        help="Redis queue connection string (e.g., 'host:port:queue_name')",
+    )
+    ingest_parser.add_argument(
+        "--zeek", dest="zeek_file", help="Zeek DNS JSON log file to import"
+    )
 
     args = parser.parse_args()
 
     # Load configurations
     load_logging_config()
-    logger.info({"event": "cli_start", "message": f"Starting CLI with command: {args.command or 'none'}"})
+    logger.info(
+        {
+            "event": "cli_start",
+            "message": f"Starting CLI with command: {args.command or 'none'}",
+        }
+    )
 
     if args.command == "serve":
         logger.info({"event": "cli_serve", "host": args.host, "port": args.port})
         uvicorn_run(app, host=args.host, port=args.port)
     elif args.command == "ingest":
         # Validate ingestion arguments
-        sources = [args.ndjson_file, args.json_file, args.websocket_url, args.pdns_file, args.redis_queue, args.zeek_file]
+        sources = [
+            args.ndjson_file,
+            args.json_file,
+            args.websocket_url,
+            args.pdns_file,
+            args.redis_queue,
+            args.zeek_file,
+        ]
         if sum(1 for s in sources if s) > 1:
-            logger.critical({"event": "cli_validation_error", "message": "Cannot specify more than one source"})
+            logger.critical(
+                {
+                    "event": "cli_validation_error",
+                    "message": "Cannot specify more than one source",
+                }
+            )
             print("Error: Cannot specify more than one source", file=sys.stderr)
             sys.exit(1)
         if not any(sources):
@@ -108,6 +145,7 @@ async def main():
     else:
         parser.print_help()
         sys.exit(0)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

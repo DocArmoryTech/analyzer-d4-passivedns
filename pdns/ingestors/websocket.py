@@ -6,6 +6,7 @@ from ..db.manager import DatabaseManager
 from pypdns import PDNSRecord
 from .base import DaemonIngestor
 
+
 class WebSocketIngestor(Ingestor):
     type = "websocket"  # Class variable defining the ingestor type
 
@@ -16,7 +17,7 @@ class WebSocketIngestor(Ingestor):
     async def ingest(self) -> None:
         self.running = True
         logger.info({"event": "ingestor_start", "url": self.ws_url})
-        
+
         while self.running:
             try:
                 async with websockets.connect(self.ws_url) as websocket:
@@ -30,9 +31,20 @@ class WebSocketIngestor(Ingestor):
                             await self.db_manager.store_record(rdns)
                             logger.debug({"event": "ingest_record", "record": rdns.raw})
                         except (json.JSONDecodeError, ValueError) as e:
-                            logger.debug({"event": "ingest_error", "error": str(e), "message": message})
+                            logger.debug(
+                                {
+                                    "event": "ingest_error",
+                                    "error": str(e),
+                                    "message": message,
+                                }
+                            )
                         except websockets.ConnectionClosed:
-                            logger.info({"event": "websocket_connection_closed", "url": self.ws_url})
+                            logger.info(
+                                {
+                                    "event": "websocket_connection_closed",
+                                    "url": self.ws_url,
+                                }
+                            )
                             break
                         await asyncio.sleep(0)
             except Exception as e:

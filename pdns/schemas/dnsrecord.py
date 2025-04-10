@@ -5,14 +5,17 @@ from pypdns import PDNSRecord
 import json
 from datetime import datetime
 
+
 class TimeFormat(str, Enum):
     unix = "unix"
     iso = "iso"
 
+
 class ResponseFormat(str, Enum):
     ndjson = "ndjson"
     json = "json"
-    
+
+
 class DNSRecord(BaseModel):
     rrname: str
     rrtype: str
@@ -28,10 +31,18 @@ class DNSRecord(BaseModel):
             rrname=record.rrname,
             rrtype=record.rrtype,
             rdata=record.rdata if isinstance(record.rdata, list) else [record.rdata],
-            time_first=int(record.time_first.timestamp() if isinstance(record.time_first, datetime) else record.time_first),
-            time_last=int(record.time_last.timestamp() if isinstance(record.time_last, datetime) else record.time_last),
+            time_first=int(
+                record.time_first.timestamp()
+                if isinstance(record.time_first, datetime)
+                else record.time_first
+            ),
+            time_last=int(
+                record.time_last.timestamp()
+                if isinstance(record.time_last, datetime)
+                else record.time_last
+            ),
             count=record.count,
-            sensor_id=record.sensor_id
+            sensor_id=record.sensor_id,
         )
 
     def to_ndjson(self, time_format: TimeFormat) -> str:  # Updated to use TimeFormat
@@ -48,5 +59,6 @@ class DNSRecord(BaseModel):
     @property
     def time_last_iso(self) -> str:
         return datetime.fromtimestamp(self.time_last).isoformat()
+
 
 __all__ = ["TimeFormat", "ResponseFormat", "DNSRecord"]

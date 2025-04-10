@@ -1,8 +1,8 @@
-
 from ..base import Notifier
 from ...default.helpers import logger
 import aiosmtplib
 from email.message import EmailMessage
+
 
 class MailNotifier(Notifier):
     def __init__(self, config: dict, template_dir: str):
@@ -25,6 +25,14 @@ class MailNotifier(Notifier):
                 hostname=self.smtp_host,
                 port=self.smtp_port,
             )
-            logger.debug({"event": "email_sent", "notifier": self.name, "recipient": self.recipient})
+            logger.debug(
+                {
+                    "event": "email_sent",
+                    "notifier": self.name,
+                    "recipient": self.recipient,
+                }
+            )
         except Exception as e:
-            logger.error({"event": "email_failed", "notifier": self.name, "error": str(e)})
+            logger.error(
+                {"event": "email_failed", "notifier": self.name, "error": str(e)}
+            )

@@ -3,6 +3,7 @@ from .base import NotificationFilter
 from pypdns import PDNSRecord
 from typing import List
 
+
 class CompositeFilter(NotificationFilter):
     def __init__(self, filters: List[NotificationFilter], operator: str = "and"):
         self.filters = filters

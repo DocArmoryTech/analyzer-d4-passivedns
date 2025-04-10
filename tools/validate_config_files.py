@@ -11,6 +11,7 @@ from typing import Dict, Any
 # Assuming PDNS_HOME is set, or default to project root
 try:
     from pdns.default.helpers import get_homedir
+
     CONFIG_DIR = get_homedir() / "config"
 except ImportError:
     # Fallback for standalone execution
@@ -28,45 +29,68 @@ CONFIG_SCHEMAS = {
             "exclude": ["spamhaus.org", "asn.cymru.com"],
             "expiration": {},
             "rrset_supported": ["1", "2", "5", "15", "16", "28", "33", "46"],
-            "notifiers": {}
+            "notifiers": {},
         },
         "validate": lambda config: (
-            isinstance(config["exclude"], list) and all(isinstance(s, str) for s in config["exclude"]) and
-            isinstance(config["expiration"], dict) and all(k.isdigit() and isinstance(v, int) for k, v in config["expiration"].items()) and
-            isinstance(config["rrset_supported"], list) and all(isinstance(t, str) for t in config["rrset_supported"])
-        )
+            isinstance(config["exclude"], list)
+            and all(isinstance(s, str) for s in config["exclude"])
+            and isinstance(config["expiration"], dict)
+            and all(
+                k.isdigit() and isinstance(v, int)
+                for k, v in config["expiration"].items()
+            )
+            and isinstance(config["rrset_supported"], list)
+            and all(isinstance(t, str) for t in config["rrset_supported"])
+        ),
     },
     "rrtypes": {
         "required": [],
         "defaults": {},
         "validate": lambda config: (
-            isinstance(config, list) and
-            all(isinstance(r, dict) and "type" in r and "value" in r for r in config)
-        )
+            isinstance(config, list)
+            and all(
+                isinstance(r, dict) and "type" in r and "value" in r for r in config
+            )
+        ),
     },
     "tokens": {
         "required": ["tokens"],
         "defaults": {"tokens": []},
         "validate": lambda config: (
-            isinstance(config["tokens"], list) and
-            all(isinstance(t, dict) and "value" in t and isinstance(t["value"], str) for t in config["tokens"])
-        )
+            isinstance(config["tokens"], list)
+            and all(
+                isinstance(t, dict) and "value" in t and isinstance(t["value"], str)
+                for t in config["tokens"]
+            )
+        ),
     },
     "alerts": {
         "required": ["alerts"],
         "defaults": {"alerts": []},
         "validate": lambda config: (
-            isinstance(config["alerts"], list) and
-            all(isinstance(a, dict) and "name" in a and "condition" in a and "method" in a for a in config["alerts"])
-        )
+            isinstance(config["alerts"], list)
+            and all(
+                isinstance(a, dict)
+                and "name" in a
+                and "condition" in a
+                and "method" in a
+                for a in config["alerts"]
+            )
+        ),
     },
     "database": {
         "required": ["type", "config"],
-        "defaults": {"type": "redis", "config": {"host": "127.0.0.1", "port": 6400, "db": 0}},
+        "defaults": {
+            "type": "redis",
+            "config": {"host": "127.0.0.1", "port": 6400, "db": 0},
+        },
         "validate": lambda config: (
-            isinstance(config["type"], str) and config["type"] in ["redis"] and
-            isinstance(config["config"], dict) and "host" in config["config"] and "port" in config["config"]
-        )
+            isinstance(config["type"], str)
+            and config["type"] in ["redis"]
+            and isinstance(config["config"], dict)
+            and "host" in config["config"]
+            and "port" in config["config"]
+        ),
     },
     "auth": {
         "required": ["endpoints"],
@@ -75,30 +99,48 @@ CONFIG_SCHEMAS = {
                 "info": {"auth": "none"},
                 "query": {"auth": "none"},
                 "fquery": {"auth": "none"},
-                "stream": {"auth": "none"}
+                "stream": {"auth": "none"},
             }
         },
         "validate": lambda config: (
-            isinstance(config["endpoints"], dict) and
-            all(isinstance(v, dict) and "auth" in v and v["auth"] in ["none", "bearer", "openid"] for v in config["endpoints"].values())
-        )
+            isinstance(config["endpoints"], dict)
+            and all(
+                isinstance(v, dict)
+                and "auth" in v
+                and v["auth"] in ["none", "bearer", "openid"]
+                for v in config["endpoints"].values()
+            )
+        ),
     },
     "logging": {
         "required": ["version", "handlers", "loggers"],
         "defaults": {
             "version": 1,
             "disable_existing_loggers": False,
-            "formatters": {"verbose": {"format": "%(levelname)s %(asctime)s %(name)s %(module)s:%(lineno)s %(message)s"}},
-            "handlers": {"console": {"level": "INFO", "class": "logging.StreamHandler", "formatter": "verbose"}},
-            "loggers": {"pdns": {"level": "INFO", "handlers": ["console"], "propagate": False}}
+            "formatters": {
+                "verbose": {
+                    "format": "%(levelname)s %(asctime)s %(name)s %(module)s:%(lineno)s %(message)s"
+                }
+            },
+            "handlers": {
+                "console": {
+                    "level": "INFO",
+                    "class": "logging.StreamHandler",
+                    "formatter": "verbose",
+                }
+            },
+            "loggers": {
+                "pdns": {"level": "INFO", "handlers": ["console"], "propagate": False}
+            },
         },
         "validate": lambda config: (
-            isinstance(config["version"], int) and
-            isinstance(config["handlers"], dict) and
-            isinstance(config["loggers"], dict)
-        )
-    }
+            isinstance(config["version"], int)
+            and isinstance(config["handlers"], dict)
+            and isinstance(config["loggers"], dict)
+        ),
+    },
 }
+
 
 def validate_config_file(file_name: str) -> Dict[str, Any]:
     """Validate a single configuration file and return its contents with defaults applied."""
@@ -127,7 +169,9 @@ def validate_config_file(file_name: str) -> Dict[str, Any]:
                 config[key] = schema["defaults"][key]
                 logger.info(f"Added default value for {key} in {file_name}")
             else:
-                logger.error(f"Required key {key} missing in {file_name} and no default available")
+                logger.error(
+                    f"Required key {key} missing in {file_name} and no default available"
+                )
                 sys.exit(1)
 
     # Validate structure
@@ -136,6 +180,7 @@ def validate_config_file(file_name: str) -> Dict[str, Any]:
         sys.exit(1)
 
     return config
+
 
 def main():
     """Validate all configuration files."""
@@ -151,6 +196,7 @@ def main():
             logger.error(f"Error validating {config_name}.json: {e}")
             sys.exit(1)
     logger.info("All configuration files validated successfully.")
+
 
 if __name__ == "__main__":
     main()

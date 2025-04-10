@@ -8,9 +8,10 @@ from pypdns import PDNSRecord
 from .base import DaemonIngestor
 from .utils import parse_line
 
+
 class RedisQueueIngestor(DaemonIngestor):
     type = "d4redis"  # Class variable defining the ingestor type
- 
+
     def __init__(self, db_manager: DatabaseManager, redis_uri: str) -> None:
         super().__init__(db_manager)
         self.redis_uri: str = redis_uri
@@ -25,26 +26,35 @@ class RedisQueueIngestor(DaemonIngestor):
             elif ":" in self.redis_uri:
                 host, port, queue = self.redis_uri.split(":", 2)
                 redis = await aioredis.create_redis_pool(
-                    (host, int(port)),
-                    encoding="utf-8",
-                    minsize=1,
-                    maxsize=10
+                    (host, int(port)), encoding="utf-8", minsize=1, maxsize=10
                 )
                 self.queue_key = queue
-                logger.info({"event": "redis_queue_connect", "host": host, "port": port, "queue": queue})
+                logger.info(
+                    {
+                        "event": "redis_queue_connect",
+                        "host": host,
+                        "port": port,
+                        "queue": queue,
+                    }
+                )
             else:
                 socket, queue = self.redis_uri.rsplit(":", 1)
                 redis = await aioredis.create_redis_pool(
-                    socket,
-                    encoding="utf-8",
-                    minsize=1,
-                    maxsize=10
+                    socket, encoding="utf-8", minsize=1, maxsize=10
                 )
                 self.queue_key = queue
-                logger.info({"event": "redis_queue_connect", "socket": socket, "queue": queue})
+                logger.info(
+                    {"event": "redis_queue_connect", "socket": socket, "queue": queue}
+                )
             return redis
         except Exception as e:
-            logger.error({"event": "redis_queue_connect_error", "queue_name": self.redis_uri, "error": str(e)})
+            logger.error(
+                {
+                    "event": "redis_queue_connect_error",
+                    "queue_name": self.redis_uri,
+                    "error": str(e),
+                }
+            )
             raise
 
     async def ingest(self) -> None:
@@ -75,6 +85,8 @@ class RedisQueueIngestor(DaemonIngestor):
             if self.redis_client:
                 self.redis_client.close()
                 await self.redis_client.wait_closed()
-                logger.info({"event": "redis_queue_disconnect", "queue_name": self.redis_uri})
+                logger.info(
+                    {"event": "redis_queue_disconnect", "queue_name": self.redis_uri}
+                )
             self.running = False
             logger.info({"event": "ingestor_complete", "queue_name": self.redis_uri})
