@@ -14,10 +14,12 @@ logger = logging.getLogger("validate_config")
 # Assuming PDNS_HOME is set, or default to project root
 try:
     from pdns.default.helpers import get_homedir
+
     CONFIG_DIR = get_homedir() / "config"
 except ImportError:
     # Fallback for standalone execution
     CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
+
 
 def validate_generic_config_file() -> bool:
     """Validate generic.json against generic.json.sample."""
@@ -58,7 +60,9 @@ def validate_generic_config_file() -> bool:
                 current_path = f"{path}.{key}" if path else key
 
                 if user_value is None:
-                    logger.warning(f"Entry missing in user config at '{current_path}'. Will default to: {sample_value}")
+                    logger.warning(
+                        f"Entry missing in user config at '{current_path}'. Will default to: {sample_value}"
+                    )
                     continue
 
                 if type(user_value) != type(sample_value):
@@ -73,9 +77,13 @@ def validate_generic_config_file() -> bool:
 
         elif isinstance(sample, list):
             if not isinstance(user, list):
-                raise ValueError(f"Expected a list at '{path}', got: {type(user)} ({user})")
+                raise ValueError(
+                    f"Expected a list at '{path}', got: {type(user)} ({user})"
+                )
             if not user and sample:  # Allow empty lists if sample isn’t empty
-                logger.warning(f"List at '{path}' is empty in user config, sample has: {sample}")
+                logger.warning(
+                    f"List at '{path}' is empty in user config, sample has: {sample}"
+                )
             # For simplicity, don’t enforce list item types unless critical (e.g., tokens)
             if path == "tokens" and user:
                 for u, s in zip(user, sample):
@@ -87,9 +95,12 @@ def validate_generic_config_file() -> bool:
     # Check for extra keys in user config not in sample
     for key in user_config.keys():
         if key not in sample_config:
-            raise ValueError(f"'{key}' is missing in {sample_path}. Compare with {user_path}")
+            raise ValueError(
+                f"'{key}' is missing in {sample_path}. Compare with {user_path}"
+            )
 
     return True
+
 
 def update_user_config() -> bool:
     """Update generic.json with missing entries from generic.json.sample."""
@@ -117,13 +128,19 @@ def update_user_config() -> bool:
                 continue
             current_path = f"{path}.{key}" if path else key
             if key not in user:
-                logger.info(f"'{current_path}' missing in user config, adding: {sample_value}")
-                logger.info(f"Description: {sample_config['_notes'].get(key, 'No description')}")
+                logger.info(
+                    f"'{current_path}' missing in user config, adding: {sample_value}"
+                )
+                logger.info(
+                    f"Description: {sample_config['_notes'].get(key, 'No description')}"
+                )
                 user[key] = sample_value
                 has_new_entry = True
             elif isinstance(sample_value, dict):
                 if not isinstance(user[key], dict):
-                    logger.info(f"Replacing invalid type at '{current_path}' with: {sample_value}")
+                    logger.info(
+                        f"Replacing invalid type at '{current_path}' with: {sample_value}"
+                    )
                     user[key] = sample_value
                     has_new_entry = True
                 else:
@@ -138,11 +155,22 @@ def update_user_config() -> bool:
 
     return has_new_entry
 
+
 def main():
     """Validate or update configuration files based on arguments."""
-    parser = argparse.ArgumentParser(description="Check and update config files for analyzer-d4-passivedns.")
-    parser.add_argument("--check", action="store_true", help="Check if generic.json matches generic.json.sample")
-    parser.add_argument("--update", action="store_true", help="Update generic.json with missing entries from sample")
+    parser = argparse.ArgumentParser(
+        description="Check and update config files for analyzer-d4-passivedns."
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Check if generic.json matches generic.json.sample",
+    )
+    parser.add_argument(
+        "--update",
+        action="store_true",
+        help="Update generic.json with missing entries from sample",
+    )
     args = parser.parse_args()
 
     if not args.check and not args.update:
@@ -164,6 +192,7 @@ def main():
         except Exception as e:
             logger.error(f"Update failed: {e}")
             sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
