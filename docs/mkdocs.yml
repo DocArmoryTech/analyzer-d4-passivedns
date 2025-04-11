@@ -1,1 +1,36 @@
-site_name: My Docs
+site_name: analyzer-d4-passivedns Documentation
+theme:
+  name: material
+  palette:
+    primary: teal
+  features:
+    - content.code.copy
+    - search.suggest
+nav:
+  - Home: index.md
+  - User Guide:
+      - Getting Started: user/getting-started.md
+      - Querying DNS Records: user/querying-dns.md
+      - API Reference: user/api-reference.md
+      - Schemas: user/schemas.md
+  - Admin Guide:
+      - Installation: admin/installation.md
+      - Configuration: admin/configuration.md
+      - Ingestors: admin/ingestors.md
+      - Notifiers: admin/notifiers.md
+      - Troubleshooting: admin/troubleshooting.md
+  - Developer Guide:
+      - Contributing: dev/contributing.md
+      - Codebase Overview: dev/codebase-overview.md
+      - Adding Ingestors: dev/adding-ingestors.md
+      - Adding Notifiers: dev/adding-notifiers.md
+      - Testing: dev/testing.md
+      - API Development: dev/api-development.md
+plugins:
+  - search
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
