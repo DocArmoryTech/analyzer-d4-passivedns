@@ -1,8 +1,8 @@
+# pdns/notifiers/mail/notifier.py
 from ..base import Notifier
 from ...default.helpers import logger
 import aiosmtplib
 from email.message import EmailMessage
-
 
 class MailNotifier(Notifier):
     def __init__(self, config: dict, template_dir: str):
@@ -12,25 +12,20 @@ class MailNotifier(Notifier):
         self.sender = config["sender"]
         self.recipient = config["recipient"]
 
-    async def notify(self, message: str) -> None:
+    def default_template(self) -> str:
+        return "template.jinja"  # Default template in pdns/notifiers/mail/
+
+    async def handle(self, record: 'PDNSRecord') -> None:
+        message = self.render_template(record)
         msg = EmailMessage()
         msg["Subject"] = f"Alert: {self.name}"
         msg["From"] = self.sender
         msg["To"] = self.recipient
         msg.set_content(message)
-
         try:
-            await aiosmtplib.send(
-                msg,
-                hostname=self.smtp_host,
-                port=self.smtp_port,
-            )
+            await aiosmtplib.send(msg, hostname=self.smtp_host, port=self.smtp_port)
             logger.debug(
-                {
-                    "event": "email_sent",
-                    "notifier": self.name,
-                    "recipient": self.recipient,
-                }
+                {"event": "email_sent", "notifier": self.name, "recipient": self.recipient}
             )
         except Exception as e:
             logger.error(

@@ -43,25 +43,24 @@ class NotificationManager:
 
                 # Create filter and instantiate notifier
                 filter_instance = self._create_filter(config.get("filter", {}))
-                template_dir = f"pdns/notifiers/{notifier_type}"
-                notifier = notifier_class(config, filter_instance, template_dir)
+                default_template_dir = f"pdns/notifiers/{notifier_type}"
+                notifier = notifier_class(config, filter_instance, default_template_dir)
                 self.notifiers.append(notifier)
                 logger.debug({
                     "event": "notifier_loaded",
                     "index": idx,
                     "type": notifier_type,
-                    "name": config.get("name")
+                    "name": config.get("name"),
                 })
             except Exception as e:
                 logger.error({
                     "event": "notifier_load_failed",
                     "index": idx,
-                    "error": str(e)
+                    "error": str(e),
                 })
 
     def _create_filter(self, filter_config: dict) -> NotificationFilter:
         """Dynamically create a filter instance based on config."""
-        # Dynamically load all NotificationFilter subclasses from filters module
         filter_module = importlib.import_module(".notifiers.filters", package="pdns")
         filter_classes = {
             cls.type: cls
@@ -74,7 +73,6 @@ class NotificationManager:
         if not filter_class:
             raise ValueError(f"Unknown filter type: {filter_type}")
 
-        # Instantiate the filter with its config (excluding 'type')
         filter_params = {k: v for k, v in filter_config.items() if k != "type"}
         return filter_class(**filter_params)
 
@@ -83,8 +81,7 @@ class NotificationManager:
         async with self._lock:
             for notifier in self.notifiers:
                 if notifier.filter.evaluate(record):
-                    message = notifier.render_template(record)
-                    await notifier.notify(message)
+                    await notifier.handle(record)
 
     async def initialize(self) -> None:
         logger.info({"event": "notification_manager_initialized"})
