@@ -8,14 +8,23 @@ from .base import Ingestor
 
 
 class JSONFileIngestor(Ingestor):
+    """Ingestor for JSON files containing a list of DNS records.
+
+    The file is expected to contain a JSON array of record objects.
+    """
+
     def __init__(self, db_manager: DatabaseManager, file_path: str) -> None:
         super().__init__(db_manager)
         self.file_path: str = file_path
 
     async def ingest(self) -> None:
+        """Ingest records from a JSON file containing a list of records.
+
+        The entire file is read into memory, parsed as a JSON array, and each record
+        is processed and stored in the database.
+        """
         self.running = True
         logger.info({"event": "ingestor_start", "file": self.file_path})
-
         try:
             async with aiofiles.open(self.file_path, "r") as f:
                 content = await f.read()

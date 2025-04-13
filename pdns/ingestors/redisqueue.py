@@ -10,7 +10,12 @@ from .utils import parse_line
 
 
 class RedisQueueIngestor(DaemonIngestor):
-    type = "d4redis"  # Class variable defining the ingestor type
+    """Ingestor for DNS records from a Redis queue.
+
+    Pulls messages from a Redis queue, parses them, and stores them in the database.
+    """
+
+    type = "d4redis"  # Identifier for this ingestor type
 
     def __init__(self, db_manager: DatabaseManager, redis_uri: str) -> None:
         super().__init__(db_manager)
@@ -18,6 +23,11 @@ class RedisQueueIngestor(DaemonIngestor):
         self.redis_client: Optional[aioredis.Redis] = None
 
     async def connect_redis(self) -> aioredis.Redis:
+        """Connect to the Redis server based on the provided URI.
+
+        Returns:
+            aioredis.Redis: The Redis client connection.
+        """
         try:
             if self.redis_uri.startswith("redis://"):
                 uri = self.redis_uri
@@ -58,35 +68,40 @@ class RedisQueueIngestor(DaemonIngestor):
             raise
 
     async def ingest(self) -> None:
+        """Continuously ingest records from the Redis queue.
+
+        Reconnects with exponential backoff on failure.
+        """
         self.running = True
         logger.info({"event": "ingestor_start", "queue_name": self.redis_uri})
-
-        try:
-            self.redis_client = await self.connect_redis()
-            queue_key = getattr(self, "queue_key", self.redis_uri)
-
-            while self.running:
-                record_line = await self.redis_client.rpop(queue_key)
-                if record_line is None:
-                    await asyncio.sleep(1)
-                    continue
-                l = record_line.decode("utf-8").strip()
-                try:
-                    rdns = parse_line(l)
-                    if rdns:
-                        await self.db_manager.store_record(rdns)
-                        logger.debug({"event": "ingest_record", "record": rdns.raw})
-                except DNSParseError as e:
-                    logger.debug({"event": "ingest_error", "error": str(e), "line": l})
-                await asyncio.sleep(0)
-        except Exception as e:
-            logger.error({"event": "ingest_error", "error": str(e)})
-        finally:
-            if self.redis_client:
-                self.redis_client.close()
-                await self.redis_client.wait_closed()
-                logger.info(
-                    {"event": "redis_queue_disconnect", "queue_name": self.redis_uri}
-                )
-            self.running = False
-            logger.info({"event": "ingestor_complete", "queue_name": self.redis_uri})
+        retry_delay = 1
+        max_retry_delay = 60
+        while self.running:
+            try:
+                self.redis_client = await self.connect_redis()
+                queue_key = getattr(self, "queue_key", self.redis_uri)
+                retry_delay = 1  # Reset on success
+                while self.running:
+                    record_line = await self.redis_client.rpop(queue_key)
+                    if record_line is None:
+                        await asyncio.sleep(1)
+                        continue
+                    l = record_line.decode("utf-8").strip()
+                    try:
+                        rdns = parse_line(l)
+                        if rdns:
+                            await self.db_manager.store_record(rdns)
+                            logger.debug({"event": "ingest_record", "record": rdns.raw})
+                    except DNSParseError as e:
+                        logger.debug({"event": "ingest_error", "error": str(e), "line": l})
+                    await asyncio.sleep(0)
+            except Exception as e:
+                logger.error({"event": "ingest_error", "error": str(e)})
+                if self.redis_client:
+                    self.redis_client.close()
+                    await self.redis_client.wait_closed()
+                if not self.running:
+                    break
+                await asyncio.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, max_retry_delay)
+        logger.info({"event": "ingestor_complete", "queue_name": self.redis_uri})
