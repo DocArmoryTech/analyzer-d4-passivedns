@@ -1,23 +1,15 @@
 # Welcome to analyzer-d4-passivedns Documentation
 
-**analyzer-d4-passivedns** is a Redis-backed passive DNS database designed to collect, store, and query DNS records from various sources. It provides a REST API for querying data, ingestors for processing DNS records, and notifiers for alerting on specific events.
+The `analyzer-d4-passivedns` project is a Passive DNS server that collects, stores, and serves DNS data compliant with the *Passive DNS - Common Output Format (draft-dulaunoy-dnsop-passive-dns-cof)*. This documentation is divided into three sections:
 
-This documentation is divided into three sections to suit different audiences:
+- **[User Guide](./user/getting-started.md)**: For end-users querying the API to access Passive DNS data.
+- **[Admin Guide](./admin/installation.md)**: For administrators installing, configuring, and managing the server.
+- **[Developer Guide](./dev/contributing.md)**: For developers contributing to or extending the project.
 
-- **[User Guide](./user/getting-started.md)**: For end-users querying the REST API to retrieve passive DNS data.
-- **[Admin Guide](./admin/installation.md)**: For system administrators installing, configuring, and maintaining the project.
-- **[Developer Guide](./dev/contributing.md)**: For developers contributing to or extending the codebase.
+## Getting Started
 
-## Quick Start
+- **Users**: Start with the [User Guide](./user/getting-started.md) to learn how to query DNS records.
+- **Admins**: Follow the [Installation Guide](./admin/installation.md) to set up the server.
+- **Developers**: Check out the [Contributing Guide](./dev/contributing.md) to begin coding.
 
-To get started, choose your role:
-
-- **Users**: Learn how to query pDNS records in the [User Guide](./user/getting-started.md).
-- **Admins**: Follow the [Installation Guide](./admin/installation.md) to set up the project.
-- **Developers**: Check out the [Contributing Guide](./dev/contributing.md) to dive into the codebase.
-
-## About the Project
-
-This project is part of the [D4 Project](https://github.com/D4-project), aimed at enhancing network security through passive DNS analysis. It supports backwards compatibility with previous versions and uses Poetry for dependency management.
-
-For more details, explore the relevant guide or visit the [GitHub repository](https://github.com/D4-project/analyzer-d4-passivedns).
+Built with [MkDocs](https://www.mkdocs.org/). Source available on [GitHub](https://github.com/D4-project/analyzer-d4-passivedns).

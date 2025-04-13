@@ -1,81 +1,93 @@
-# API Documentation
+# API Reference
 
-The Passive DNS Analyzer exposes the following endpoints, built with FastAPI and rate-limited using `slowapi`.
+This section documents the available API endpoints: `/info`, `/query/{q}`, `/fquery/{q}`, and `/stream/{q}`.
 
-## Base URL
-- `/`
+## /info
 
-## Endpoints
+**Description**: Returns metadata about the Passive DNS server.
 
-### `/fquery/{q}`
 - **Method**: GET
-- **Description**: Queries DNS records and associated records (e.g., domains for an IP).
-- **Rate Limit**: 50/minute
-- **Parameters**:
-  - `q` (path): Query string (domain or IP).
-  - `cursor` (query, optional): Pagination cursor.
-  - `limit` (query, default=200): Max records (10-1000).
-  - `rrtype` (query, optional): Filter by RR type (e.g., "A", "AAAA").
-  - `metadata` (query, default=false): Wrap response in metadata object.
-  - `time_format` (query, default="unix"): "unix" (int) or "iso" (string).
-  - `format` (query, default="ndjson"): "ndjson" or "json".
+- **Path**: `/info`
+- **Parameters**: None
 - **Response**:
-  - **NDJSON** (`format=ndjson`): Stream of `PDNSRecordSchema` objects.
-  - **JSON** (`format=json`, `metadata=false`): List of `PDNSRecordSchema` objects.
-  - **JSON with Metadata** (`format=json`, `metadata=true`): `MetadataResponse` object.
-- **Headers**: `X-Total-Count`, `X-Next-Cursor`, `X-Pagination-Required`.
-- **Example**:
-  ```
-  GET /fquery/example.com?format=json&metadata=true
-  ```
-  ```json
-  {
-    "data": [{"rrname": "example.com", "rrtype": "A", "rdata": ["192.0.2.1"], "time_first": 1548624738, "time_last": 1548624799, "count": 5, "sensor_id": null}],
-    "total": 1,
-    "next_cursor": null
-  }
-  ```
+  - `version` (string): Software version.
+  - `software` (string): Software name.
+  - `stats` (object): Database statistics.
+  - `sensors` (array): List of sensors with IDs and record counts.
 
-### `/stream/{q}`
+**Example**:
+```bash
+curl http://localhost:8000/info
+```
+
+**Response**:
+```json
+{
+  "version": "1.0.0",
+  "software": "analyzer-d4-passivedns",
+  "stats": { "total_records": 10000 },
+  "sensors": [ { "sensor_id": "sensor1", "count": 5000 } ]
+}
+```
+
+## /query/{q}
+
+**Description**: Retrieves DNS records for a specific domain.
+
 - **Method**: GET
-- **Description**: Streams DNS records for a query in NDJSON format.
-- **Rate Limit**: 20/minute
+- **Path**: `/query/{q}`
 - **Parameters**:
-  - `q` (path): Query string (domain or IP).
-  - `chunk_size` (query, default=100): Records per chunk (10-1000).
-  - `rrtype` (query, optional): Filter by RR type.
-  - `time_format` (query, default="unix"): "unix" or "iso".
-- **Response**: NDJSON stream of `PDNSRecordSchema` objects.
-- **Example**:
-  ```
-  GET /stream/example.com
-  ```
-  ```
-  {"rrname": "example.com", "rrtype": "A", "rdata": ["192.0.2.1"], "time_first": 1548624738, "time_last": 1548624799, "count": 5, "sensor_id": null}
-  ```
+  - `q` (string, required): Domain (e.g., "example.com").
+  - `cursor` (string, optional): Pagination cursor.
+  - `limit` (integer, optional): Max records (1–1000, default: 200).
+  - `rrtype` (string, optional): Filter by RR type (e.g., "A").
+  - `metadata` (boolean, optional): Include metadata (default: false).
+  - `time_format` (string, optional): "unix" or "iso" (default: "unix").
+  - `format` (string, optional): "ndjson" or "json" (default: "ndjson").
 
-### `/query/{q}`
-- **Method**: GET
-- **Description**: Queries DNS records for a specific domain.
-- **Rate Limit**: 50/minute
-- **Parameters**: Same as `/fquery`.
-- **Response**: Same as `/fquery`.
-- **Example**: Similar to `/fquery`.
+**Response**: NDJSON or JSON array of records with headers `X-Total-Count` and `X-Next-Cursor`.
 
-### `/info`
+**Example**:
+```bash
+curl http://localhost:8000/query/example.com?limit=2
+```
+
+**Response (NDJSON)**:
+```
+{"time_first": 1698777600, "time_last": 1698777600, "rrname": "example.com", "rrtype": "A", "rdata": "93.184.216.34"}
+{"time_first": 1698777600, "time_last": 1698777600, "rrname": "example.com", "rrtype": "AAAA", "rdata": "2606:2800:220:1:248:1893:25c8:1946"}
+```
+
+## /fquery/{q}
+
+**Description**: Queries associated DNS records for a domain or IP.
+
 - **Method**: GET
-- **Description**: Returns system stats and sensor info.
-- **Rate Limit**: 100/minute
-- **Response**: `InfoResponse` object.
-- **Example**:
-  ```
-  GET /info
-  ```
-  ```json
-  {
-    "version": "git",
-    "software": "analyzer-d4-passivedns",
-    "stats": {"records": 1000},
-    "sensors": [{"sensor_id": "sensor1", "count": 500}]
-  }
-  ```
+- **Path**: `/fquery/{q}`
+- **Parameters**: Same as `/query/{q}`.
+
+**Response**: NDJSON or JSON with associated records.
+
+**Example**:
+```bash
+curl http://localhost:8000/fquery/93.184.216.34
+```
+
+## /stream/{q}
+
+**Description**: Streams DNS records for a domain or IP.
+
+- **Method**: GET
+- **Path**: `/stream/{q}`
+- **Parameters**:
+  - `q` (string, required): Domain or IP.
+  - `chunk_size` (integer, optional): Records per chunk (10–1000, default: 100).
+  - `rrtype` (string, optional): Filter by RR type.
+  - `time_format` (string, optional): "unix" or "iso".
+
+**Response**: NDJSON stream.
+
+**Example**:
+```bash
+curl http://localhost:8000/stream/example.com
+```
