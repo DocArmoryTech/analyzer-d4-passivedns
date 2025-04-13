@@ -45,6 +45,13 @@ flake8 = "^7.2.0"
 black = "^25.1.0"
 mypy = "^1.15.0"
 types-requests = "^2.32.0.20250328"
+mkdocs-material = "^9.6.11"
+mkdocs = "^1.6.1"
+
+
+[tool.poetry.group.docs.dependencies]
+mkdocs = "^1.6.1"
+mkdocs-material = "^9.6.11"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]  # Updated to a stable Poetry version

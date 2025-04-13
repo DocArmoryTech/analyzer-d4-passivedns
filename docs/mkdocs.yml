@@ -1,11 +1,19 @@
 site_name: analyzer-d4-passivedns Documentation
+site_description: Documentation for the analyzer-d4-passivedns project, a Redis-backed passive DNS database.
+site_author: D4 Project
+repo_url: https://github.com/D4-project/analyzer-d4-passivedns
 theme:
   name: material
   palette:
     primary: teal
+    accent: amber
   features:
     - content.code.copy
+    - content.code.select
     - search.suggest
+    - search.highlight
+  logo: assets/logo.png
+  favicon: assets/favicon.ico
 nav:
   - Home: index.md
   - User Guide:
@@ -34,3 +42,4 @@ markdown_extensions:
   - pymdownx.inlinehilite
   - pymdownx.snippets
   - pymdownx.superfences
+docs_dir: .
