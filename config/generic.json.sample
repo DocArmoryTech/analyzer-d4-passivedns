@@ -51,22 +51,20 @@
   ],
   "notifiers": [
     {
-      "type": "log",
-      "name": "log_alert",
-      "filter": {
-        "type": "string",
-        "condition": {"rrtype": "A"}
-      },
-      "level": "info"
-    },
-    {
       "type": "email",
-      "name": "email_alert",
-      "filter": {
-        "type": "dnsbl",
-        "dnsbl_domain": "zen.spamhaus.org"
+      "config": {
+        "smtp_host": "localhost",
+        "smtp_port": 25,
+        "sender": "alerts@example.com",
+        "recipient": "admin@example.com"
       },
-      "to": "admin@example.com"
+      "filter": {
+        "type": "composite",
+        "filters": [
+          {"type": "string", "condition": {"rrtype": "A"}, "case_sensitive": false}
+        ],
+        "operator": "and"
+      }
     }
   ]
 }

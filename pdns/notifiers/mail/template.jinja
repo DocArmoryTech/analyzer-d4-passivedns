@@ -1,10 +1,10 @@
-Subject: Alert for {{ record.rrname }}
-
-Record Details:
-- Name: {{ record.rrname }}
+# pdns/notifiers/mail/template.jinja
+Alert: {{ record.rrname }}
 - Type: {{ record.rrtype }}
 - Data: {{ record.rdata | join(', ') }}
 - First Seen: {{ record.time_first }}
 - Last Seen: {{ record.time_last }}
-- Count: {{ record.count }}{% if record.sensor_id %}
-- Sensor: {{ record.sensor_id }}{% endif %}
+- Count: {{ record.count }}
+{% if record.sensor_id %}
+- Sensor: {{ record.sensor_id }}
+{% endif %}

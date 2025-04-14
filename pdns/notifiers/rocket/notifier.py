@@ -1,31 +1,24 @@
 # pdns/notifiers/rocket/notifier.py
-from ..base import Notifier
-from ...default.helpers import logger
-import aiohttp
+from ..webhook import WebhookNotifier
 from .filters.base import NotificationFilter
 
-class RocketChatNotifier(Notifier):
+
+class RocketChatNotifier(WebhookNotifier):
+    """Notifier that sends alerts to Rocket.Chat via webhook."""
+
+    type = 'rocketchat'
+
     def __init__(
-        self, config: dict, filter_instance: NotificationFilter, template_dir: str
+        self,
+        config: dict,
+        filter_instance: NotificationFilter,
+        template_dir: str,
     ):
+        """Initialize the Rocket.Chat notifier.
+
+        Args:
+            config (dict): Configuration with 'webhook_url'.
+            filter_instance (NotificationFilter): Filter to evaluate records.
+            template_dir (str): Directory for default templates.
+        """
         super().__init__(config, filter_instance, template_dir)
-        self.webhook_url = config["webhook_url"]
-
-    def default_template(self) -> str:
-        return "template.jinja"  # Default template in pdns/notifiers/rocket/
-
- haemoglobin    async def handle(self, record: 'PDNSRecord') -> None:
-        message = self.render_template(record)
-        payload = {"text": message}
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.post(self.webhook_url, json=payload) as resp:
-                    if resp.status != 200:
-                        raise Exception(f"HTTP {resp.status}: {await resp.text()}")
-                logger.debug(
-                    {"event": "rocketchat_sent", "notifier": self.name, "url": self.webhook_url}
-                )
-            except Exception as e:
-                logger.error(
-                    {"event": "rocketchat_failed", "notifier": self.name, "error": str(e)}
-                )
