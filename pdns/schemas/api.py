@@ -1,4 +1,4 @@
-# pdns/schemas.py
+
 from pydantic import BaseModel
 from typing import List, Optional, Union
 from pypdns import PDNSRecord
