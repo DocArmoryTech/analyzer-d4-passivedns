@@ -24,7 +24,7 @@ VALID_TOKENS = []
 def load_bearer_tokens():
     global VALID_TOKENS
     try:
-        tokens_data = get_config("tokens", quiet=True) or {}
+        tokens_data = await get_config("tokens", quiet=True) or {}
         VALID_TOKENS = [t["value"] for t in tokens_data.get("tokens", [])]
         logger.info(f"Loaded {len(VALID_TOKENS)} tokens at startup")
     except Exception as e:
@@ -34,7 +34,7 @@ def load_bearer_tokens():
 # Database backend configuration
 def get_database_backend() -> Database:
     try:
-        db_config = get_config("database", quiet=True) or {}
+        db_config = await get_config("database", quiet=True) or {}
         db_type = db_config.get("type", "redis")
         config = db_config.get("config", {"host": "127.0.0.1", "port": 6400, "db": 0})
     except Exception as e:
@@ -62,7 +62,7 @@ async def get_database() -> DatabaseManager:
 
 async def start_ingestors(db: DatabaseManager):
     """Start zero or more ingestors based on configuration."""
-    ingestors_config = get_config("ingestors", quiet=True) or {}
+    ingestors_config = await get_config("ingestors", quiet=True) or {}
 
     if not ingestors_config:
         logger.info(
@@ -167,7 +167,7 @@ DEFAULT_CONFIG = {
     }
 }
 
-auth_config = get_config("auth", quiet=True) or DEFAULT_CONFIG
+auth_config = await get_config("auth", quiet=True) or DEFAULT_CONFIG
 
 
 def get_auth_dependency():

@@ -21,7 +21,7 @@ class DatabaseManager:
 
         # Load exclusion substrings from config
         try:
-            excludes = get_config("generic", "excludesubstrings")
+            excludes = await get_config("generic", "excludesubstrings")
             if not isinstance(excludes, list):
                 raise ValueError("excludesubstrings in generic config must be a list")
             self.excludesubstrings: List[str] = excludes
@@ -33,7 +33,7 @@ class DatabaseManager:
 
         # Load expiration settings from config
         try:
-            expirations = get_config("generic", "expiration")
+            expirations = await get_config("generic", "expiration")
             if not isinstance(expirations, dict):
                 raise ValueError("expiration in generic config must be a dictionary")
             # Convert keys to strings if they aren't already

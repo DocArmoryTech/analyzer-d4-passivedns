@@ -13,7 +13,7 @@ class RedisDatabase(Database):
     def __init__(self):
         """Initialize Redis connection based on database.json config."""
         # Load Redis configuration with defaults
-        self.config = get_config(
+        self.config = await get_config(
             "redis", default={"host": "127.0.0.1", "port": 6379, "db": 0}
         )
         self.db_number = self.config.get("db", 0)
