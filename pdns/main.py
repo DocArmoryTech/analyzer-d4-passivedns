@@ -152,6 +152,10 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(429, _rate_limit_exceeded_handler)
 
+@app.on_event("startup")
+async def startup_event():
+    await init_configs()
+    
 # Authentication setup
 security_bearer = HTTPBearer(auto_error=False)
 DEFAULT_CONFIG = {

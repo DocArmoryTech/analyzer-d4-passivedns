@@ -1,209 +1,90 @@
-# tests/test_notifiers/test_manager.py
-import pytest
-from pdns.notifiers.manager import NotificationManager
-from pdns.notifiers.log.notifier import LogNotifier
-from pdns.notifiers.mail.notifier import MailNotifier
-from pdns.notifiers.filters.string import StringFilter
-from pdns.notifiers.filters.dnsbl import DNSBLFilter
-from pdns.notifiers.filters.composite import CompositeFilter
+# pdns/notifiers/manager.py
+from ..default.helpers import logger, get_config
 from pypdns import PDNSRecord
-from unittest.mock import AsyncMock, patch, MagicMock
+from .base import Notifier
+from .filters.base import NotificationFilter
+from typing import List
+import asyncio
+import importlib
+import inspect
 
+class NotificationManager:
+    """Manages a collection of notifiers for processing DNS records."""
 
-@pytest.mark.asyncio
-async def test_notification_manager_load_notifiers():
-    """Test loading multiple notifiers from config."""
-    config = [
-        {
-            "type": "log",
-            "config": {"level": "info"},
-            "filter": {"type": "string", "condition": {"rrtype": "A"}},
-        },
-        {
-            "type": "mail",
-            "config": {
-                "smtp_host": "smtp.example.com",
-                "smtp_port": 587,
-                "sender": "alerts@example.com",
-                "recipient": "admin@example.com",
-            },
-            "filter": {
-                "type": "composite",
-                "operator": "not",
-                "filters": [{"type": "string", "condition": {"rrtype": "MX"}}],
-            },
-        },
-    ]
-    with patch("pdns.default.helpers.get_config", return_value=config):
-        manager = NotificationManager()
-        assert len(manager.notifiers) == 2
-        assert isinstance(manager.notifiers[0], LogNotifier)
-        assert isinstance(manager.notifiers[1], MailNotifier)
-        assert isinstance(manager.notifiers[0].filter, StringFilter)
-        assert isinstance(manager.notifiers[1].filter, CompositeFilter)
+    def __init__(self) -> None:
+        self.notifiers: List[Notifier] = []
+        self._lock = asyncio.Lock()
+        self._load_notifiers()
 
+    def _load_notifiers(self) -> None:
+        """Load notifiers from the generic config dynamically."""
+        notifiers_config = get_config("notifiers", quiet=True) or []
+        if not isinstance(notifiers_config, list):
+            logger.error("Notifiers config must be a list; no notifiers loaded")
+            return
 
-@pytest.mark.asyncio
-async def test_notification_manager_invalid_config():
-    """Test handling of invalid notifier config."""
-    config = [
-        {"type": "log"},  # Missing config
-        {"type": "invalid", "config": {}},  # Unknown type
-    ]
-    with patch("pdns.default.helpers.get_config", return_value=config):
-        with patch("pdns.default.helpers.logger.error") as mock_log:
-            manager = NotificationManager()
-            assert len(manager.notifiers) == 0
-            assert mock_log.call_count == 2
+        # Dynamically load all Notifier subclasses from the notifiers module
+        notifier_module = importlib.import_module(".notifiers", package="pdns")
+        notifier_classes = {
+            cls.type: cls
+            for name, cls in inspect.getmembers(notifier_module, inspect.isclass)
+            if hasattr(cls, "type") and issubclass(cls, Notifier) and cls != Notifier
+        }
 
+        for idx, config in enumerate(notifiers_config):
+            try:
+                notifier_type = config.get("type")
+                if not notifier_type:
+                    raise ValueError("Missing 'type' field in notifier config")
 
-@pytest.mark.asyncio
-async def test_notification_manager_check_record():
-    """Test processing a record with multiple notifiers."""
-    config = [
-        {
-            "type": "log",
-            "config": {"level": "info"},
-            "filter": {"type": "string", "condition": {"rrtype": "A"}},
-        },
-        {
-            "type": "log",
-            "config": {"level": "debug"},
-            "filter": {"type": "string", "condition": {"rrtype": "MX"}},
-        },
-    ]
-    with patch("pdns.default.helpers.get_config", return_value=config):
-        manager = NotificationManager()
-        record = PDNSRecord(rrtype="A", rrname="example.com", rdata=["1.2.3.4"])
-        with patch.object(LogNotifier, "handle", new_callable=AsyncMock) as mock_handle:
-            await manager.check_record(record)
-            assert mock_handle.call_count == 1  # Only the first notifier matches
+                notifier_class = notifier_classes.get(notifier_type)
+                if not notifier_class:
+                    raise ValueError(f"Unknown notifier type: {notifier_type}")
 
+                # Create filter and instantiate notifier
+                filter_instance = self._create_filter(config.get("filter", {}))
+                default_template_dir = f"pdns/notifiers/{notifier_type}"
+                notifier = notifier_class(config, filter_instance, default_template_dir)
+                self.notifiers.append(notifier)
+                logger.debug({
+                    "event": "notifier_loaded",
+                    "index": idx,
+                    "type": notifier_type,
+                    "name": config.get("name"),
+                })
+            except Exception as e:
+                logger.error({
+                    "event": "notifier_load_failed",
+                    "index": idx,
+                    "error": str(e),
+                })
 
-@pytest.mark.asyncio
-async def test_notification_manager_nested_filter():
-    """Test loading and evaluating nested composite filters."""
-    config = [
-        {
-            "type": "log",
-            "config": {"level": "info"},
-            "filter": {
-                "type": "composite",
-                "operator": "or",
-                "filters": [
-                    {
-                        "type": "composite",
-                        "operator": "and",
-                        "filters": [
-                            {"type": "string", "condition": {"rrtype": "A"}},
-                            {"type": "string", "condition": {"rrname": "example.com"}},
-                        ],
-                    },
-                    {
-                        "type": "composite",
-                        "operator": "not",
-                        "filters": [{"type": "string", "condition": {"rrtype": "MX"}}],
-                    },
-                ],
-            },
-        },
-    ]
-    with patch("pdns.default.helpers.get_config", return_value=config):
-        manager = NotificationManager()
-        assert len(manager.notifiers) == 1
-        record = PDNSRecord(rrtype="TXT", rrname="example.com", rdata=["text"])
-        with patch.object(LogNotifier, "handle", new_callable=AsyncMock) as mock_handle:
-            await manager.check_record(record)
-            mock_handle.assert_called_once()  # Matches 'not MX'
+    def _create_filter(self, filter_config: dict) -> NotificationFilter:
+        """Dynamically create a filter instance based on config."""
+        filter_module = importlib.import_module(".notifiers.filters", package="pdns")
+        filter_classes = {
+            cls.type: cls
+            for name, cls in inspect.getmembers(filter_module, inspect.isclass)
+            if hasattr(cls, "type") and issubclass(cls, NotificationFilter) and cls != NotificationFilter
+        }
 
+        filter_type = filter_config.get("type", "string")  # Default to "string"
+        filter_class = filter_classes.get(filter_type)
+        if not filter_class:
+            raise ValueError(f"Unknown filter type: {filter_type}")
 
-@pytest.mark.asyncio
-async def test_notification_manager_async_filter():
-    """Test handling async filters like DNSBLFilter."""
-    config = [
-        {
-            "type": "log",
-            "config": {"level": "info"},
-            "filter": {"type": "dnsbl", "dnsbl_domain": "zen.spamhaus.org"},
-        },
-    ]
-    with patch("pdns.default.helpers.get_config", return_value=config):
-        manager = NotificationManager()
-        record = PDNSRecord(rrtype="A", rrname="example.com", rdata=["1.2.3.4"])
-        with patch("dns.asyncresolver.resolve", new_callable=AsyncMock, return_value=["127.0.0.2"]):
-            with patch.object(LogNotifier, "handle", new_callable=AsyncMock) as mock_handle:
-                await manager.check_record(record)
-                mock_handle.assert_called_once()
+        filter_params = {k: v for k, v in filter_config.items() if k != "type"}
+        return filter_class(**filter_params)
 
+    async def check_record(self, record: PDNSRecord) -> None:
+        """Check a record against all notifiers and trigger notifications."""
+        async with self._lock:
+            for notifier in self.notifiers:
+                if notifier.filter.evaluate(record):
+                    await notifier.handle(record)
 
-@pytest.mark.asyncio
-async def test_notification_manager_shutdown():
-    """Test shutdown cleans up notifier resources."""
-    config = [
-        {
-            "type": "matrix",
-            "config": {
-                "homeserver_url": "https://matrix.example.com",
-                "access_token": "token",
-                "room_id": "!room:example.com",
-            },
-            "filter": {"type": "string", "condition": {"rrtype": "A"}},
-        },
-    ]
-    with patch("pdns.default.helpers.get_config", return_value=config):
-        manager = NotificationManager()
-        with patch("aiohttp.ClientSession.close", new_callable=AsyncMock) as mock_close:
-            await manager.shutdown()
-            mock_close.assert_called_once()
+    async def initialize(self) -> None:
+        logger.info({"event": "notification_manager_initialized"})
 
-
-@pytest.mark.asyncio
-async def test_notification_manager_debug_records():
-    """Test debug logging of triggered records."""
-    config = [
-        {
-            "type": "log",
-            "config": {"level": "info"},
-            "filter": {"type": "string", "condition": {"rrtype": "A"}},
-        },
-    ]
-    with patch("pdns.default.helpers.get_config", return_value=config):
-        with patch("pdns.default.helpers.get_config", side_effect=lambda k, **kw: True if k == "notifiers_debug_records" else config):
-            manager = NotificationManager()
-            record = PDNSRecord(rrtype="A", rrname="example.com", rdata=["1.2.3.4"])
-            with patch("pdns.default.helpers.logger.debug") as mock_log:
-                await manager.check_record(record)
-                mock_log.assert_called_once()
-                assert mock_log.call_args[0][0]["event"] == "notification_triggered"
-
-
-@pytest.mark.asyncio
-async def test_notification_manager_performance():
-    """Test performance with multiple notifiers."""
-    config = [
-        {
-            "type": "log",
-            "config": {"level": "info"},
-            "filter": {"type": "string", "condition": {"rrtype": "A"}},
-        },
-        {
-            "type": "log",
-            "config": {"level": "debug"},
-            "filter": {
-                "type": "composite",
-                "operator": "not",
-                "filters": [{"type": "string", "condition": {"rrtype": "MX"}}],
-            },
-        },
-    ]
-    with patch("pdns.default.helpers.get_config", return_value=config):
-        manager = NotificationManager()
-        records = [
-            PDNSRecord(rrtype="A", rrname="example.com", rdata=["1.2.3.4"])
-            for _ in range(1000)
-        ]
-        start = time.time()
-        for record in records:
-            await manager.check_record(record)
-        duration = time.time() - start
-        assert duration < 1.0  # Process 1000 records in under 1 second
+    async def shutdown(self) -> None:
+        logger.info({"event": "notification_manager_shutdown"})
