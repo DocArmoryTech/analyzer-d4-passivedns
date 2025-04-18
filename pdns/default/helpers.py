@@ -51,7 +51,7 @@ def get_homedir() -> Path:
 
 async def init_configs(path_to_config_files: str | Path | None = None) -> None:
     """
-    Preload all JSON config files asynchronously at application startup.
+    Load all JSON config files asynchronously at application startup.
 
     Args:
         path_to_config_files: Optional path to config directory; defaults to PDNS_HOME/config.
@@ -63,92 +63,57 @@ async def init_configs(path_to_config_files: str | Path | None = None) -> None:
         >>> await init_configs()
         # Loads config/generic.json, config/redis.json
     """
-    async with _config_lock:
-        if _configs:
-            return
-        await load_configs(path_to_config_files)
-
-@lru_cache(64)
-async def load_configs(path_to_config_files: str | Path | None = None) -> None:
-    """
-    Load all JSON config files from config/ into a global dictionary asynchronously.
-
-    Args:
-        path_to_config_files: Optional path to config directory; defaults to PDNS_HOME/config.
-
-    Raises:
-        InvalidConfigError: If config directory is missing or invalid.
-
-    Example:
-        >>> await load_configs()
-        # Loads config/generic.json, config/redis.json
-    """
     global _configs
     async with _config_lock:
         if _configs:
+            logger.warning("Configs already loaded, skipping initialization")
             return
         config_path = Path(path_to_config_files) if path_to_config_files else get_homedir() / "config"
-        if not config_path.exists():
-            raise InvalidConfigError(f"Configuration directory {config_path} does not exist.")
-        if not config_path.is_dir():
-            raise InvalidConfigError(f"Configuration directory {config_path} is not a directory.")
+        if not config_path.exists() or not config_path.is_dir():
+            raise InvalidConfigError(f"Configuration directory {config_path} is invalid")
 
-        _configs.clear()
-        for entry in os.scandir(config_path):
-            if entry.is_file() and entry.name.endswith(".json"):
-                async with aiofiles.open(entry.path, mode="r") as f:
+        for entry in config_path.glob("*.json"):
+            try:
+                async with aiofiles.open(entry, "r") as f:
                     content = await f.read()
-                    _configs[Path(entry.name).stem] = json.loads(content)
+                    _configs[entry.stem] = json.loads(content)
                 logger.debug(f"Loaded config: {entry.name}")
+            except json.JSONDecodeError as e:
+                raise InvalidConfigError(f"Invalid JSON in {entry}: {e}")
 
 @lru_cache(64)
-async def get_config(config_type: str, entry: str | None = None, quiet: bool = False) -> Any:
+def get_config(config_type: str, entry: str | None = None, default: Any = None) -> Any:
     """
-    Get a config entry from the specified config type, with fallback to sample file.
+    Get a config entry from the specified config type.
 
     Args:
         config_type: Config file name without .json (e.g., 'generic', 'redis').
         entry: Specific key within the config (e.g., 'redis.backend').
-        quiet: Suppress warnings if True.
+        default: Default value if config or entry is missing.
 
     Returns:
-        Config value or entire config dict if entry is None.
+        Config value or default if not found.
 
     Raises:
-        InvalidConfigError: If neither config nor sample file exists.
+        InvalidConfigError: If configs are not initialized.
 
     Example:
-        >>> await get_config('generic', 'excludesubstrings')
+        >>> get_config('generic', 'excludesubstrings')
         ['bad.com']
-        >>> await get_config('redis')
+        >>> get_config('redis')
         {'backend': 'redis_json', 'host': 'localhost'}
     """
-    global _configs
-    async with _config_lock:
-        if not _configs:
-            await load_configs()
+    if not _configs:
+        raise InvalidConfigError("Configs not initialized. Call init_configs() first")
 
-        if config_type in _configs:
-            if entry:
-                if entry in _configs[config_type]:
-                    return _configs[config_type][entry]
-                else:
-                    if not quiet:
-                        logger.warning(f"Unable to find {entry} in config file.")
-            else:
-                return _configs[config_type]
-        else:
-            if not quiet:
-                logger.warning(f"No {config_type} config file available.")
+    config = _configs.get(config_type, {})
+    if not config:
+        logger.warning(f"No {config_type} config found, returning default: {default}")
+        return default
 
-        sample_path = get_homedir() / "config" / f"{config_type}.json.sample"
-        if not sample_path.exists():
-            logger.warning(f"No sample config available: {sample_path}")
-            raise InvalidConfigError(f"No {config_type} config or sample file available.")
-
-        if not quiet:
-            logger.warning(f"Falling back on sample config: {sample_path}")
-        async with aiofiles.open(sample_path, mode="r") as f:
-            content = await f.read()
-            sample_config = json.loads(content)
-        return sample_config[entry] if entry else sample_config
+    if entry:
+        result = config.get(entry, default)
+        if result is None:
+            logger.warning(f"Entry {entry} not found in {config_type}, returning default: {default}")
+        return result
+    return config

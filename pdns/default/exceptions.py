@@ -1,8 +1,10 @@
+# pdns/default/exceptions.py
 class MissingEnv(Exception):
+    """Raised when a required environment variable (e.g., PDNS_HOME) is missing."""
     pass
 
-class RedisConnectionError(Exception):
-    """Raised when a Redis connection fails."""
+class DBConnectionError(Exception):
+    """Raised when a database connection fails."""
     pass
 
 class InvalidConfigError(Exception):

@@ -1,19 +1,22 @@
-# pdns/db/redis.py
+# pdns/db/redis_json.py
 from .base import Database
 from ..default.helpers import logger
 from ..default.exceptions import DBConnectionError
 from pypdns import PDNSRecord
 import aioredis
-import json
 from typing import Tuple, List, Optional, AsyncGenerator
+from collections import deque
 
-class RedisDatabase(Database):
-    """Redis implementation of the Database interface for Passive DNS storage."""
+class RedisJSONDatabase(Database):
+    """Redis implementation using JSON hashes for Passive DNS storage."""
     def __init__(self, **kwargs):
         """Initialize Redis connection with provided configuration."""
         self.config = kwargs or {"host": "127.0.0.1", "port": 6379, "db": 0}
         self.db_number = self.config.get("db", 0)
+        if "socket" not in self.config and not ("host" in self.config and "port" in self.config):
+            raise ValueError("Redis config must specify 'socket' or 'host' and 'port'")
         self.redis_pool = None
+        self.queue = deque()
 
     async def connect(self) -> None:
         """Establish a connection pool to Redis."""
@@ -28,7 +31,7 @@ class RedisDatabase(Database):
                     maxsize=10,
                 )
                 logger.info({"event": "redis_init", "type": "unix", "socket": self.config["socket"], "db": self.db_number})
-            elif "host" in self.config and "port" in self.config:
+            else:
                 self.redis_pool = await aioredis.create_redis_pool(
                     (self.config["host"], self.config["port"]),
                     db=self.db_number,
@@ -38,8 +41,9 @@ class RedisDatabase(Database):
                     maxsize=10,
                 )
                 logger.info({"event": "redis_init", "type": "tcp", "host": self.config["host"], "port": self.config["port"], "db": self.db_number})
-            else:
-                raise ValueError("Invalid Redis config: must specify 'socket' or 'host' and 'port'")
+            while self.queue:
+                record, expiration = self.queue.popleft()
+                await self.store_record(record, expiration)
         except aioredis.RedisError as e:
             logger.error({"event": "redis_connect_error", "error": str(e)})
             raise DBConnectionError(f"Failed to connect to Redis: {e}")
@@ -49,107 +53,92 @@ class RedisDatabase(Database):
         if self.redis_pool:
             self.redis_pool.close()
             await self.redis_pool.wait_closed()
+            self.redis_pool = None
             logger.info({"event": "redis_disconnect"})
 
     async def store_record(self, record: PDNSRecord, expiration: Optional[int] = None) -> None:
-        """Store a Passive DNS record in Redis with an optional expiration time."""
+        """Store a Passive DNS record in Redis with optional expiration."""
         if not self.redis_pool:
-            await self.connect()
+            self.queue.append((record, expiration))
+            logger.debug({"event": "record_queued", "rrname": record.rrname})
+            return
 
-        rrtype = str(record.rrtype) if record.rrtype.isdigit() else str(record.rrtype)
+        rrtype = str(record.rrtype).upper()
         rrname = record.rrname.lower().rstrip(".")
         rdata = record.rdata if isinstance(record.rdata, list) else [record.rdata]
 
         async with self.redis_pool.acquire() as redis:
             async with redis.pipeline() as pipe:
                 for rd in rdata:
+                    record_key = f"record:{rrname}:{rrtype}:{rd}"
+                    record_data = {
+                        "rrname": rrname,
+                        "rrtype": rrtype,
+                        "rdata": rd,
+                        "time_first": record.time_first,
+                        "time_last": record.time_last,
+                        "count": record.count or 1,
+                        "sensor_id": record.sensor_id,
+                    }
+                    pipe.hset(record_key, mapping=record_data)
+                    if expiration:
+                        pipe.expire(record_key, expiration)
+
                     query_key = f"r:{rrname}:{rrtype}"
                     value_key = f"v:{rd}:{rrtype}"
-                    firstseen_key = f"s:{rrname}:{rd}:{rrtype}"
-                    lastseen_key = f"l:{rrname}:{rd}:{rrtype}"
-                    occ_key = f"o:{rrname}:{rd}:{rrtype}"
-                    sensor_key = f"sensor:{rrname}:{rd}:{rrtype}"
-
                     pipe.sadd(query_key, rd)
                     pipe.sadd(value_key, rrname)
-                    if expiration is not None:
+                    if expiration:
                         pipe.expire(query_key, expiration)
                         pipe.expire(value_key, expiration)
 
-                    if not await redis.exists(firstseen_key):
-                        pipe.set(firstseen_key, str(record.time_first))
-                    current_lastseen = await redis.get(lastseen_key)
-                    if current_lastseen is None or int(record.time_last) > int(current_lastseen):
-                        pipe.set(lastseen_key, str(record.time_last))
-                    pipe.incrby(occ_key, record.count or 1)
-
-                    if record.sensor_id:
-                        pipe.set(sensor_key, record.sensor_id)
-
-                pipe.hincrby("dist:type", rrtype, 1)
+                pipe.hincrby("stats:types", rrtype, 1)
                 pipe.incrby("stats:processed", 1)
                 if record.sensor_id:
                     pipe.hincrby(f"sensor:{record.sensor_id}", "count", record.count or 1)
 
                 await pipe.execute()
 
-        logger.debug({"event": "record_stored", "rrname": rrname, "rrtype": rrtype, "rdata": rdata})
+        logger.debug({"event": "record_stored", "rrname": rrname, "rrtype": rrtype})
 
-    async def get_record(self, rrname: str, cursor: Optional[str] = None, limit: int = 200, rrtype: Optional[str] = None) -> Tuple[List[PDNSRecord], Optional[str], int]:
-        """Fetch records for a given rrname with optional rrtype filter and pagination."""
+    async def get_record(self, rrname: str, cursor: Optional[str], limit: int, rrtype: Optional[str] = None) -> Tuple[List[PDNSRecord], Optional[str], int]:
+        """Fetch records for a given rrname with pagination."""
         if not self.redis_pool:
             await self.connect()
 
         async with self.redis_pool.acquire() as redis:
             try:
                 rrname = rrname.lower().rstrip(".")
-                query_key = f"r:{rrname}:{rrtype}" if rrtype else None
-
-                if query_key:
-                    rdata_set = await redis.smembers(query_key)
-                else:
-                    cursor_scan = 0
-                    rdata_set = set()
-                    while True:
-                        cursor_scan, keys = await redis.scan(cursor_scan, match=f"r:{rrname}:*", count=100)
-                        for key in keys:
-                            rdata_set.update(await redis.smembers(key))
-                        if cursor_scan == 0:
-                            break
-
-                if not rdata_set:
-                    return [], None, 0
-
-                rdata_list = sorted(rdata_set)
-                start = int(cursor) if cursor else 0
-                end = min(start + limit, len(rdata_list))
-                total = len(rdata_list)
-                paginated_rdata = rdata_list[start:end]
-                next_cursor = str(end) if end < total else None
-
+                query_key = f"r:{rrname}:{rrtype}" if rrtype else f"r:{rrname}:*"
+                cursor = cursor or "0"
                 records = []
-                rrtypes = ([rrtype] if rrtype else [k.split(":")[-1] for k in keys] if not query_key else [])
-                for rd in paginated_rdata:
-                    for rrt in rrtypes or [rrtype]:
-                        firstseen_key = f"s:{rrname}:{rd}:{rrt}"
-                        lastseen_key = f"l:{rrname}:{rd}:{rrt}"
-                        occ_key = f"o:{rrname}:{rd}:{rrt}"
-                        sensor_key = f"sensor:{rrname}:{rd}:{rrt}"
 
-                        time_first = await redis.get(firstseen_key) or 0
-                        time_last = await redis.get(lastseen_key) or 0
-                        count = await redis.get(occ_key) or 1
-                        sensor_id = await redis.get(sensor_key)
+                rdata_list = []
+                total = 0
+                while True:
+                    cursor, rdata = await redis.sscan(query_key, cursor, count=limit)
+                    rdata_list.extend(rdata)
+                    total += len(rdata)
+                    if cursor == "0":
+                        break
+                    if len(rdata_list) >= limit:
+                        break
 
+                next_cursor = cursor if cursor != "0" and len(rdata_list) >= limit else None
+
+                for rd in rdata_list[:limit]:
+                    record_key = f"record:{rrname}:{rrtype}:{rd}"
+                    data = await redis.hgetall(record_key)
+                    if data:
                         records.append(
                             PDNSRecord(
-                                rrname=rrname,
-                                rrtype=rrt,
-                                rdata=rd,
-                                time_first=int(time_first),
-                                time_last=int(time_last),
-                                count=int(count),
-                                sensor_id=sensor_id,
+                                rrname=data["rrname"],
+                                rrtype=data["rrtype"],
+                                rdata=data["rdata"],
+                                time_first=int(data["time_first"]),
+                                time_last=int(data["time_last"]),
+                                count=int(data["count"]),
+                                sensor_id=data.get("sensor_id"),
                             )
                         )
 
@@ -159,20 +148,28 @@ class RedisDatabase(Database):
                 return [], None, 0
 
     async def stream_records(self, q: str, chunk_size: int = 100) -> AsyncGenerator[PDNSRecord, None]:
-        """Stream records for a given query in chunks."""
+        """Stream records for a given rrname in chunks."""
         if not self.redis_pool:
             await self.connect()
 
         async with self.redis_pool.acquire() as redis:
-            cursor = 0
+            cursor = "0"
+            q = q.lower().rstrip(".")
             while True:
-                cursor, keys = await redis.scan(cursor, match=f"pdns:{q}:*", count=chunk_size)
+                cursor, keys = await redis.scan(cursor, match=f"record:{q}:*:*", count=chunk_size)
                 for key in keys:
-                    value = await redis.get(key)
-                    if value:
-                        data = json.loads(value)
-                        yield PDNSRecord(**data)
-                if cursor == 0:
+                    data = await redis.hgetall(key)
+                    if data:
+                        yield PDNSRecord(
+                            rrname=data["rrname"],
+                            rrtype=data["rrtype"],
+                            rdata=data["rdata"],
+                            time_first=int(data["time_first"]),
+                            time_last=int(data["time_last"]),
+                            count=int(data["count"]),
+                            sensor_id=data.get("sensor_id"),
+                        )
+                if cursor == "0":
                     break
 
     async def get_stats(self) -> dict:
@@ -182,11 +179,12 @@ class RedisDatabase(Database):
 
         async with self.redis_pool.acquire() as redis:
             try:
-                info = await redis.info()
-                return {"records": info.get("keys", 0)}
+                processed = await redis.get("stats:processed") or "0"
+                types = await redis.hgetall("stats:types")
+                return {"records_processed": int(processed), "types": {k: int(v) for k, v in types.items()}}
             except aioredis.RedisError as e:
                 logger.error({"event": "redis_get_stats_failed", "error": str(e)})
-                return {"records": 0}
+                return {"records_processed": 0, "types": {}}
 
     async def get_sensors(self) -> List[Tuple[str, int]]:
         """Retrieve sensor statistics."""
@@ -195,12 +193,15 @@ class RedisDatabase(Database):
 
         async with self.redis_pool.acquire() as redis:
             try:
-                sensor_keys = await redis.keys("sensor:*")
+                cursor = "0"
                 sensors = []
-                for key in sensor_keys:
-                    count = await redis.hget(key, "count")
-                    if count:
+                while True:
+                    cursor, keys = await redis.scan(cursor, match="sensor:*", count=100)
+                    for key in keys:
+                        count = await redis.hget(key, "count") or "0"
                         sensors.append((key.split(":")[1], int(count)))
+                    if cursor == "0":
+                        break
                 return sensors
             except aioredis.RedisError as e:
                 logger.error({"event": "redis_get_sensors_failed", "error": str(e)})
@@ -214,13 +215,13 @@ class RedisDatabase(Database):
         async with self.redis_pool.acquire() as redis:
             try:
                 associated = []
-                cursor = 0
+                cursor = "0"
                 while True:
                     cursor, keys = await redis.scan(cursor, match=f"v:{q}:*", count=100)
                     for key in keys:
                         rrnames = await redis.smembers(key)
                         associated.extend(rrnames)
-                    if cursor == 0:
+                    if cursor == "0":
                         break
                 return list(set(associated))
             except aioredis.RedisError as e:
