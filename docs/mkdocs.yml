@@ -1,4 +1,3 @@
-```yaml
 site_name: analyzer-d4-passivedns Documentation
 site_description: Documentation for the analyzer-d4-passivedns project, a FastAPI-based Passive DNS server compliant with the Passive DNS Common Output Format.
 site_author: D4 Project
