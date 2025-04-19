@@ -1,141 +1,133 @@
 # analyzer-d4-passivedns
 
-analyzer-d4-passivedns is an analyzer for a D4 network sensor including a complete Passive DNS server. The analyser can process data produced by D4 sensors (in [passivedns](https://github.com/gamelinux/passivedns) CSV format (more to come)) or independently from D4 using [COF websocket](https://datatracker.ietf.org/doc/html/draft-dulaunoy-dnsop-passive-dns-cof) streams.
+analyzer-d4-passivedns is an advanced analyzer for D4 network sensors, featuring a fully compliant Passive DNS server. It processes data from D4 sensors in [passivedns](https://github.com/gamelinux/passivedns) CSV format and independently via [COF websocket](https://datatracker.ietf.org/doc/html/draft-dulaunoy-dnsop-passive-dns-cof) streams. The package includes a Passive DNS server that adheres to the [Passive DNS - Common Output Format (draft-dulaunoy-dnsop-passive-dns-cof)](https://tools.ietf.org/html/draft-dulaunoy-dnsop-passive-dns-cof), enabling efficient querying of DNS records.
 
-The package include a Passive DNS server which can be queried later to search for the Passive DNS records.
+## Background and Origins
 
-# Features
+The `analyzer-d4-passivedns` project originated from the need for a robust Passive DNS solution tailored for D4 network sensors. It builds upon the original [analyzer-d4-passivedns](https://github.com/D4-project/analyzer-d4-passivedns) by the D4 Project, drawing inspiration from tools like [passivedns](https://github.com/gamelinux/passivedns) and the COF standard. The project evolved to address scalability, performance, and modern API requirements, transitioning to FastAPI for its auto-generated OpenAPI spec and enhanced developer experience.
 
-- [Input stream] - A D4 analyzer which can be plugged to one or more [D4 servers](https://github.com/D4-project/d4-core) to get a stream of DNS records
-- [Input Stream] - A websocket stream (or a file stream) in NDJSON [COF format](https://datatracker.ietf.org/doc/html/draft-dulaunoy-dnsop-passive-dns-cof) 
-- [Output API] A compliant [Passive DNS ReST server compliant to Common Output Format](https://tools.ietf.org/html/draft-dulaunoy-dnsop-passive-dns-cof)
-- A flexible and simple analyser which can be configured to collect the required records from DNS records
+## Utility
 
-# Overview
+This tool is invaluable for network security analysts, researchers, and administrators. It offers:
+- Real-time collection and storage of DNS data from D4 sensors and COF streams.
+- A queryable Passive DNS database for historical analysis.
+- Flexible configuration to filter and process specific DNS records.
+- Integration with modern notification systems for alerting on DNS events.
+
+## Origins and Influences
+
+The project is influenced by:
+- **D4 Project**: Providing the foundational framework for sensor integration.
+- **passivedns**: Inspiring the initial CSV-based data processing.
+- **COF Standard**: Driving the adoption of a standardized output format.
+- **FastAPI**: Enabling a modern, auto-documented API framework.
+
+## Features
+
+- **[Input Streams]**:
+  - **D4 Analyzer**: Connects to one or more [D4 servers](https://github.com/D4-project/d4-core) to stream DNS records.
+  - **COF Websocket**: Processes NDJSON COF format from websockets or files.
+- **[Output API]**: A fully compliant Passive DNS ReST server with auto-generated OpenAPI documentation via FastAPI.
+- **Flexible Configuration**: Configurable via JSON to collect specific DNS records.
+- **Modular Design**: Supports custom ingestors and notifiers for extensibility.
+- **High Performance**: Optimized with Redis or KV Rocks backends.
+- **Authentication and Rate Limiting**: Secure API access with configurable controls.
+
+## Comparative Benefits
+
+Compared to the original [analyzer-d4-passivedns](https://github.com/D4-project/analyzer-d4-passivedns), this version offers:
+- **Modern API**: FastAPI replaces the Tornado-based server, providing an interactive OpenAPI spec.
+- **Enhanced Performance**: Improved database interactions with Redis and KV Rocks.
+- **Modularity**: Dynamic loading of ingestors and notifiers via `generic.json`.
+- **Documentation**: Comprehensive guides with Mermaid diagrams for developers.
+- **Scalability**: Better handling of large datasets with streaming and pagination.
+
+## Architecture
+
+The project leverages Python 3.8+ and FastAPI, with a modular architecture:
+- **Database Layer**: Redis or KV Rocks with dynamic backend selection.
+- **Ingestors**: Modular components for data ingestion (e.g., D4, COF).
+- **Notifiers**: Configurable alert system (e.g., email, webhooks).
+- **API Layer**: FastAPI-driven endpoints with OpenAPI documentation.
+- **Configuration**: Centralized JSON-based settings.
 
 ## Requirements
 
-- Python 3.8
-- Redis >5.0 or [kvrocks](https://github.com/apache/incubator-kvrocks)
-- Tornado
-- iptools
+- **Python**: 3.8 or higher.
+- **Database**: Redis (>5.0) or [KV Rocks](https://github.com/apache/incubator-kvrocks).
+- **Dependencies**: Managed via Poetry (replacing virtualenv setup).
 
 ## Install
 
 ### Redis
 
-~~~~
-./install_server.sh
-~~~~
+```bash
+./bin/install_server_redis.sh
+```
 
-All the Python 3 code will be installed in a virtualenv (PDNSENV).
+### KV Rocks
 
-### Kvrocks
+```bash
+./bin/install_server_kvrocks.sh
+```
 
-~~~
-./install_server_kvrocks.sh
-~~~
-
-All the Python 3 code will be installed in a virtualenv (PDNSENV).
+Install dependencies:
+```bash
+poetry install
+```
 
 ## Running
 
-### Start the redis server or kvrocks server
+### Start the Database
 
-Don't forget to set the DB directory in the redis.conf configuration. By default, the redis for Passive DNS is running on TCP port 6400
-
-~~~~
+For Redis:
+```bash
 ./redis/src/redis-server ./etc/redis.conf
-~~~~
+```
 
-or
-
-~~~~
+For KV Rocks:
+```bash
 ./kvrocks/src/kvrocks -c ./etc/kvrocks.conf
-~~~~
+```
 
-### Start the Passive DNS COF server
+### Start the Passive DNS Server
 
-~~~~
-. ./PDNSENV/bin/activate
-cd ./bin/
-python3 ./pdns-cof-server.py
-~~~~
+```bash
+poetry run uvicorn pdns.main:app --host 0.0.0.0 --port 8000
+```
 
-## Feeding the Passive DNS server
+## Feeding the Passive DNS Server
 
-You have two ways to feed the Passive DNS server. You can combine multiple streams. A sample public COF stream is available from CIRCL with the newly seen IPv6 addresses and DNS records.
+### Via COF Websocket Stream
 
-### (via COF websocket stream) start the importer
+```bash
+poetry run python3 bin/pdns-import-cof.py --websocket ws://crh.circl.lu:8888
+```
 
-~~~~
-python3 pdns-import-cof.py --websocket ws://crh.circl.lu:8888
-~~~~
+### Via D4 Analyzer
 
-### (via D4) Configure and start the D4 analyzer
-
-~~~~
-cd ./etc
-cp analyzer.conf.sample analyzer.conf
-~~~~
-
-Edit the analyzer.conf to match the UUID of the analyzer queue from your D4 server.
-
-~~~~
+Configure `etc/analyzer.conf`:
+```ini
 [global]
 my-uuid = 6072e072-bfaa-4395-9bb1-cdb3b470d715
 d4-server = 127.0.0.1:6380
-# INFO|DEBUG
 logging-level = INFO
-~~~~
+```
 
-then you can start the analyzer which will fetch the data from the analyzer, parse it and
-populate the Passive DNS database.
-
-~~~~
-. ./PDNSENV/bin/activate/
-cd ./bin/
-python3 pdns-ingestion.py
-~~~~
+Start the analyzer:
+```bash
+poetry run python3 bin/pdns-ingestion.py
+```
 
 ## Usage
 
-### Querying the server
+Query the server:
+```bash
+curl -s http://127.0.0.1:8000/query/example.com
+```
 
-~~~~shell
-adulau@kolmogorov ~/git/analyzer-d4-passivedns (master)$ curl -s http://127.0.0.1:8400/query/xn--ihuvudetpevap-xfb.se | jq .
-{
-  "time_first": 1657878272,
-  "time_last": 1657878272,
-  "count": 1,
-  "rrtype": "AAAA",
-  "rrname": "xn--ihuvudetpevap-xfb.se",
-  "rdata": "2a02:250:0:8::53",
-  "origin": "origin not configured"
-}
-~~~~
+Explore the auto-generated API docs at `http://127.0.0.1:8000/docs`.
 
-~~~~shell
-curl -s http://127.0.0.1:8400/query/2a02:250:0:8::53 
-{"time_first": 1657878141, "time_last": 1657878141, "count": 1, "rrtype": "AAAA", "rrname": "media.vastporten.se", "rdata": "2a02:250:0:8::53", "origin": "origin not configured"}
-{"time_first": 1657878929, "time_last": 1657878929, "count": 1, "rrtype": "AAAA", "rrname": "www.folkinitiativetarjeplog.se", "rdata": "2a02:250:0:8::53", "origin": "origin not configured"}
-{"time_first": 1657878272, "time_last": 1657878272, "count": 1, "rrtype": "AAAA", "rrname": "xn--ihuvudetpevap-xfb.se", "rdata": "2a02:250:0:8::53", "origin": "origin not configured"}
-{"time_first": 1657878189, "time_last": 1657878189, "count": 1, "rrtype": "AAAA", "rrname": "media.primesteps.se", "rdata": "2a02:250:0:8::53", "origin": "origin not configured"}
-{"time_first": 1657878986, "time_last": 1657878986, "count": 1, "rrtype": "AAAA", "rrname": "media.skellefteaadventurepark.se", "rdata": "2a02:250:0:8::53", "origin": "origin not configured"}
-{"time_first": 1657874940, "time_last": 1657874940, "count": 1, "rrtype": "AAAA", "rrname": "galleri.torsaspaintball.se", "rdata": "2a02:250:0:8::53", "origin": "origin not configured"}
-{"time_first": 1657874205, "time_last": 1657874205, "count": 1, "rrtype": "AAAA", "rrname": "www.media1.harlaut.se", "rdata": "2a02:250:0:8::53", "origin": "origin not configured"}
-{"time_first": 1657878165, "time_last": 1657878165, "count": 1, "rrtype": "AAAA", "rrname": "www.sd-nekretnine.rs", "rdata": "2a02:250:0:8::53", "origin": "origin not configured"}
-{"time_first": 1657878678, "time_last": 1657878678, "count": 1, "rrtype": "AAAA", "rrname": "www.www2.resultat-balans.se", "rdata": "2a02:250:0:8::53", "origin": "origin not configured"}
-{"time_first": 1657874288, "time_last": 1657874288, "count": 1, "rrtype": "AAAA", "rrname": "www.assistanshemtjanst.se", "rdata": "2a02:250:0:8::53", "origin": "origin not configured"}
-{"time_first": 1657878943, "time_last": 1657878943, "count": 1, "rrtype": "AAAA", "rrname": "kafekultur.se", "rdata": "2a02:250:0:8::53", "origin": "origin not configured"}
-{"time_first": 1657878141, "time_last": 1657878141, "count": 1, "rrtype": "AAAA", "rrname": "media1.rlab.se", "rdata": "2a02:250:0:8::53", "origin": "origin not configured"}
-{"time_first": 1657878997, "time_last": 1657878997, "count": 1, "rrtype": "AAAA", "rrname": "serbiagreenbuildingexpo.com", "rdata": "2a02:250:0:8::53", "origin": "origin not configured"}
-{"time_first": 1657879064, "time_last": 1657879064, "count": 1, "rrtype": "AAAA", "rrname": "www.framtro.nu", "rdata": "2a02:250:0:8::53", "origin": "origin not configured"}
-{"time_first": 1657874285, "time_last": 1657874285, "count": 1, "rrtype": "AAAA", "rrname": "www.twotheartist.com", "rdata": "2a02:250:0:8::53", "origin": "origin not configured"}
-{"time_first": 1657878774, "time_last": 1657878774, "count": 1, "rrtype": "AAAA", "rrname": "media.narkesten.se", "rdata": "2a02:250:0:8::53", "origin": "origin not configured"}
-~~~~
+## License
 
-# License
-
-The software is free software/open source released under the GNU Affero General Public License version 3.
-
+The software is released under the GNU Affero General Public License version 3.

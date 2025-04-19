@@ -1,5 +1,6 @@
+```yaml
 site_name: analyzer-d4-passivedns Documentation
-site_description: Documentation for the analyzer-d4-passivedns project, a Redis-backed passive DNS database.
+site_description: Documentation for the analyzer-d4-passivedns project, a FastAPI-based Passive DNS server compliant with the Passive DNS Common Output Format.
 site_author: D4 Project
 repo_url: https://github.com/D4-project/analyzer-d4-passivedns
 theme:
@@ -10,8 +11,11 @@ theme:
   features:
     - content.code.copy
     - content.code.select
+    - content.tabs
     - search.suggest
     - search.highlight
+    - navigation.sections
+    - navigation.expand
   logo: assets/logo.png
   favicon: assets/favicon.ico
 nav:
@@ -21,25 +25,42 @@ nav:
       - Querying DNS Records: user/querying-dns.md
       - API Reference: user/api-reference.md
       - Schemas: user/schemas.md
+      - Examples: user/examples.md
   - Admin Guide:
       - Installation: admin/installation.md
       - Configuration: admin/configuration.md
       - Ingestors: admin/ingestors.md
       - Notifiers: admin/notifiers.md
+      - Server Management: admin/management.md
       - Troubleshooting: admin/troubleshooting.md
   - Developer Guide:
       - Contributing: dev/contributing.md
       - Codebase Overview: dev/codebase-overview.md
       - Adding Ingestors: dev/adding-ingestors.md
       - Adding Notifiers: dev/adding-notifiers.md
-      - Testing: dev/testing.md
       - API Development: dev/api-development.md
+      - Testing: dev/testing.md
+      - Features: dev/features.md
 plugins:
-  - search
+  - search:
+      lang: en
+      separator: '[\s\-]+'
+  - minify:
+      minify_html: true
 markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
+      line_spans: __span
   - pymdownx.inlinehilite
   - pymdownx.snippets
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.emoji
+  - pymdownx.tabbed
+  - attr_list
+  - admonition
+  - def_list
 docs_dir: .
