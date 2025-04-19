@@ -48,8 +48,6 @@ plugins:
   - search:
       lang: en
       separator: '[\s\-]+'
-  - minify:
-      minify_html: true
 markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
@@ -62,8 +60,6 @@ markdown_extensions:
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.emoji
-  - pymdownx.tabbed
-      alternate_style: true
   - attr_list
   - admonition
   - def_list
