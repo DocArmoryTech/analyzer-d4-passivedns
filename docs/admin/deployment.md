@@ -184,7 +184,7 @@ graph TD
 
 ## Next Steps
 
-- Explore the API: See [API Reference](./user/api-reference.md) and [Examples](./user/examples.md).
+- Explore the API: See [API Reference](../user/api-reference.md) and [Examples](../user/examples.md).
 - Configure ingestors and notifiers: See [Configuration](../admin/configuration.md).
 - Deploy for production: See [Deployment](../admin/deployment.md).
 
