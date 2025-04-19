@@ -21,26 +21,27 @@ theme:
 nav:
   - Home: index.md
   - User Guide:
-      - Getting Started: user/getting-started.md
-      - Querying DNS Records: user/querying-dns.md
+      - Quickstart: user/quickstart.md
+      - Querying DNS Data: user/querying-dns.md
       - API Reference: user/api-reference.md
-      - Schemas: user/schemas.md
       - Examples: user/examples.md
-  - Admin Guide:
+      - Schemas: user/schemas.md
+  - Administrator Guide:
       - Installation: admin/installation.md
       - Configuration: admin/configuration.md
+      - Server Management: admin/management.md
       - Ingestors: admin/ingestors.md
       - Notifiers: admin/notifiers.md
-      - Server Management: admin/management.md
+      - Deployment: admin/deployment.md
+      - Scaling: admin/scaling.md
       - Troubleshooting: admin/troubleshooting.md
   - Developer Guide:
-      - Contributing: dev/contributing.md
       - Codebase Overview: dev/codebase-overview.md
+      - Contributing: dev/contributing.md
+      - API Development: dev/api-development.md
       - Adding Ingestors: dev/adding-ingestors.md
       - Adding Notifiers: dev/adding-notifiers.md
-      - API Development: dev/api-development.md
       - Testing: dev/testing.md
-      - Features: dev/features.md
 plugins:
   - search:
       lang: en
@@ -60,6 +61,7 @@ markdown_extensions:
           format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.emoji
   - pymdownx.tabbed
+      alternate_style: true
   - attr_list
   - admonition
   - def_list

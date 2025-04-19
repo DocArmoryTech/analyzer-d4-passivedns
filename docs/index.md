@@ -1,28 +1,18 @@
-# Welcome to analyzer-d4-passivedns Documentation
+# Welcome to Analyzer D4 Passive DNS
 
-The `analyzer-d4-passivedns` project is a modern Passive DNS server that collects, stores, and serves DNS data compliant with the [Passive DNS - Common Output Format (draft-dulaunoy-dnsop-passive-dns-cof)](https://tools.ietf.org/html/draft-dulaunoy-dnsop-passive-dns-cof). Built with FastAPI, it offers a high-performance, modular platform for processing DNS records from D4 sensors, COF websocket streams, and other sources, with auto-generated OpenAPI documentation for seamless integration.
+The `analyzer-d4-passivedns` project is a FastAPI-based Passive DNS server compliant with the [Passive DNS - Common Output Format (draft-dulaunoy-dnsop-passive-dns-cof)](https://tools.ietf.org/html/draft-dulaunoy-dnsop-passive-dns-cof). It collects, stores, and queries DNS data from various sources, enabling researchers, security analysts, and network administrators to analyze domain and IP relationships. Built with modularity and scalability in mind, it supports dynamic database backends (Redis, KV Rocks), modular ingestors, and configurable notifiers.
 
-## Overview
+This documentation provides comprehensive guides for users, administrators, and developers. Whether you’re querying DNS data, managing the server, or contributing to the codebase, you’ll find the resources you need below.
 
-This project provides:
-- **Data Ingestion**: Modular ingestors for D4 sensors, COF websockets, and custom sources.
-- **Storage**: Dynamic database backends (Redis, Redis JSON) configured via `generic.json`.
-- **API**: FastAPI-based endpoints (`/info`, `/query`, `/fquery`, `/stream`) with interactive OpenAPI docs at `/docs`.
-- **Notifications**: Configurable alerts (e.g., email, webhooks) with a no-retry policy for efficiency.
-- **Extensibility**: Easy addition of new ingestors, notifiers, and endpoints.
+## Key Features
 
-The documentation is divided into three sections:
-- **[User Guide](./user/getting-started.md)**: For end-users querying the API to access Passive DNS data.
-- **[Admin Guide](./admin/installation.md)**: For administrators installing, configuring, and managing the server.
-- **[Developer Guide](./dev/contributing.md)**: For developers contributing to or extending the project.
+- **FastAPI-Powered API**: Exposes endpoints (`/info`, `/query`, `/fquery`, `/stream`) with auto-generated OpenAPI specs at `/docs`.
+- **Modular Design**: Supports plug-and-play ingestors (e.g., COF, D4) and notifiers (e.g., log, mail, webhook).
+- **Dynamic Backends**: Configurable database support for Redis or KV Rocks via `generic.json`.
+- **COF Compliance**: Ensures interoperability with other Passive DNS systems.
+- **Scalability**: Handles high-volume data with rate limiting, expiration policies, and load balancing.
 
-## Getting Started
-
-- **Users**: Start with the [User Guide](./user/getting-started.md) to learn how to query DNS records using the API.
-- **Admins**: Follow the [Installation Guide](./admin/installation.md) to set up the server and configure the database.
-- **Developers**: Check out the [Contributing Guide](./dev/contributing.md) to set up a development environment and start coding.
-
-## Quick Start
+## Quickstart
 
 1. **Install the Server**:
    ```bash
@@ -31,27 +21,81 @@ The documentation is divided into three sections:
    poetry install
    ```
 
-2. **Configure**:
-   Edit `config/generic.json` to set the database backend:
-   ```json
-   {
-     "database": {
-       "type": "redis",
-       "config": { "host": "localhost", "port": 6379, "db": 0 }
-     }
-   }
+2. **Set Up Redis**:
+   ```bash
+   ./bin/install_server_redis.sh
+   ./redis/src/redis-server ./etc/redis.conf
    ```
 
-3. **Run the Server**:
+3. **Configure**:
+   ```bash
+   export PDNS_HOME=$(pwd)
+   cp config/generic.json.sample config/generic.json
+   ```
+
+4. **Run the Server**:
    ```bash
    poetry run uvicorn pdns.main:app --host 0.0.0.0 --port 8000
    ```
 
-4. **Explore the API**:
-   Visit `http://localhost:8000/docs` for interactive OpenAPI documentation.
+5. **Query the API**:
+   ```bash
+   curl -H "Authorization: Bearer xyz123" "http://localhost:8000/query/example.com"
+   ```
 
-## Documentation
+See [Installation](admin/installation.md) and [Querying DNS Data](user/querying-dns.md) for detailed instructions.
 
-Built with [MkDocs](https://www.mkdocs.org/) and the Material theme, this documentation is sourced from the `docs/` directory. The source code and documentation are available on [GitHub](https://github.com/D4-project/analyzer-d4-passivedns).
+## Documentation Sections
 
-For detailed setup, configuration, and development instructions, explore the respective guides linked above.
+- **User Guide**: Learn how to query DNS data using the API.
+  - [Querying DNS Data](user/querying-dns.md)
+  - [API Reference](user/api-reference.md)
+  - [Examples](user/examples.md)
+  - [Schemas](user/schemas.md)
+- **Administrator Guide**: Set up, configure, and manage the server.
+  - [Installation](admin/installation.md)
+  - [Configuration](admin/configuration.md)
+  - [Server Management](admin/management.md)
+  - [Ingestors](admin/ingestors.md)
+  - [Notifiers](admin/notifiers.md)
+  - [Troubleshooting](admin/troubleshooting.md)
+- **Developer Guide**: Contribute to the codebase and extend functionality.
+  - [Codebase Overview](dev/codebase-overview.md)
+  - [Contributing](dev/contributing.md)
+  - [API Development](dev/api-development.md)
+  - [Adding Ingestors](dev/adding-ingestors.md)
+  - [Adding Notifiers](dev/adding-notifiers.md)
+  - [Testing](dev/testing.md)
+
+## Mermaid Diagram: Documentation Structure
+
+```mermaid
+graph TD
+    A[Home: index.md] --> B[User Guide]
+    A --> C[Administrator Guide]
+    A --> D[Developer Guide]
+    B --> E[Querying DNS Data]
+    B --> F[API Reference]
+    B --> G[Examples]
+    B --> H[Schemas]
+    C --> I[Installation]
+    C --> J[Configuration]
+    C --> K[Server Management]
+    C --> L[Ingestors]
+    C --> M[Notifiers]
+    C --> N[Troubleshooting]
+    D --> O[Codebase Overview]
+    D --> P[Contributing]
+    D --> Q[API Development]
+    D --> R[Adding Ingestors]
+    D --> S[Adding Notifiers]
+    D --> T[Testing]
+```
+
+## Getting Help
+
+- **Issues**: Report bugs or request features on the [GitHub repository](https://github.com/D4-project/analyzer-d4-passivedns/issues).
+- **Community**: Join the D4 Project community for support and discussions.
+- **Documentation**: Explore the guides above or check the OpenAPI spec at `http://localhost:8000/docs`.
+
+Start exploring the documentation to query DNS data, manage the server, or contribute to the project!

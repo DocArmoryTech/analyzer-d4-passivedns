@@ -1,206 +1,325 @@
-# API Usage Examples
+# Examples
 
-This guide provides practical examples for using the `analyzer-d4-passivedns` API to query Passive DNS data, compliant with the [Passive DNS - Common Output Format (draft-dulaunoy-dnsop-passive-dns-cof)](https://tools.ietf.org/html/draft-dulaunoy-dnsop-passive-dns-cof). Built with FastAPI, the API offers endpoints like `/info`, `/query/{q}`, `/fquery/{q}`, and `/stream/{q}`, accessible via the interactive OpenAPI interface at `http://localhost:8000/docs`. These examples demonstrate common use cases for network security analysts, researchers, and administrators.
+This guide provides practical examples for querying the `analyzer-d4-passivedns` API, a FastAPI-based Passive DNS server compliant with the [Passive DNS - Common Output Format (draft-dulaunoy-dnsop-passive-dns-cof)](https://tools.ietf.org/html/draft-dulaunoy-dnsop-passive-dns-cof). It demonstrates how to use the API endpoints (`/info`, `/query/{q}`, `/fquery/{q}`, `/stream/{q}`) with tools like `curl`, Python, and JavaScript, covering use cases such as domain lookups, IP queries, fuzzy searches, CNAME queries, real-time streaming, and error handling.
 
 ## Prerequisites
 
-- A running Passive DNS server (e.g., `http://localhost:8000`).
-- A bearer token if authentication is enabled in `config/generic.json` (check with your administrator).
-- Tools like `curl`, Python (`requests`), or Postman for making HTTP requests.
+- **API Access**: Server running at `http://localhost:8000` (see [Installation](../admin/installation.md)).
+- **Authentication Token**: Configured in `config/generic.json`:
+  ```json
+  {
+    "auth": {
+      "endpoints": {
+        "query": {"auth": "bearer"},
+        "fquery": {"auth": "bearer"},
+        "stream": {"auth": "bearer"},
+        "info": {"auth": "none"}
+      },
+      "tokens": {
+        "user": "xyz123"
+      }
+    }
+  }
+  ```
+- **Tools**: `curl`, Python with `requests` or `httpx`, Node.js with `ws`, or a browser for JavaScript `fetch`.
 
-## Example 1: Check Server Status
+## Example 1: Get Server Information (`/info`)
 
-**Goal**: Verify the server is running and view its metadata.
+Retrieve server version, stats, and sensor details.
 
-**Request**:
+### Using `curl`
 
 ```bash
 curl http://localhost:8000/info
 ```
 
-**Response**:
+**Expected Response**:
 
 ```json
 {
   "version": "1.0.0",
   "software": "analyzer-d4-passivedns",
-  "stats": { "total_records": 10000 },
-  "sensors": [ { "sensor_id": "sensor1", "count": 5000 } ]
-}
-```
-
-**Use Case**: Confirm the server’s availability and check the number of records or active sensors before querying.
-
-## Example 2: Query DNS Records for a Domain
-
-**Goal**: Retrieve all DNS records for `example.com` with authentication.
-
-**Request**:
-
-Assuming `generic.json` requires a bearer token for `/query`:
-
-```json
-{
-  "auth": {
-    "endpoints": { "query": {"auth": "bearer"} },
-    "tokens": { "user": "xyz123" }
-  }
-}
-```
-
-```bash
-curl -H "Authorization: Bearer xyz123" "http://localhost:8000/query/example.com?limit=2&format=json"
-```
-
-**Response**:
-
-```json
-[
-  {
-    "time_first": 1698777600,
-    "time_last": 1698777600,
-    "rrname": "example.com",
-    "rrtype": "A",
-    "rdata": "93.184.216.34",
-    "count": 1,
-    "sensor_id": "sensor1"
+  "stats": {
+    "total_records": 10000
   },
-  {
-    "time_first": 1698777600,
-    "time_last": 1698777600,
-    "rrname": "example.com",
-    "rrtype": "AAAA",
-    "rdata": "2606:2800:220:1:248:1893:25c8:1946",
-    "count": 1,
-    "sensor_id": "sensor1"
-  }
-]
-```
-
-**Use Case**: Investigate the IP addresses associated with a domain to identify potential malicious infrastructure.
-
-## Example 3: Query Associated Records for an IP
-
-**Goal**: Find all domains resolving to a specific IP address.
-
-**Request**:
-
-```bash
-curl -H "Authorization: Bearer xyz123" "http://localhost:8000/fquery/93.184.216.34?format=json"
-```
-
-**Response**:
-
-```json
-[
-  {
-    "time_first": 1698777600,
-    "time_last": 1698777600,
-    "rrname": "example.com",
-    "rrtype": "A",
-    "rdata": "93.184.216.34",
-    "count": 1,
-    "sensor_id": "sensor1"
-  },
-  {
-    "time_first": 1698777600,
-    "time_last": 1698777600,
-    "rrname": "another.com",
-    "rrtype": "A",
-    "rdata": "93.184.216.34",
-    "count": 1,
-    "sensor_id": "sensor2"
-  }
-]
-```
-
-**Use Case**: Identify domains hosted on a suspicious IP to detect shared infrastructure in phishing campaigns.
-
-## Example 4: Stream Large Datasets
-
-**Goal**: Stream DNS records for a domain to handle large volumes of data.
-
-**Request**:
-
-```bash
-curl -H "Authorization: Bearer xyz123" "http://localhost:8000/stream/example.com?chunk_size=1&time_format=iso"
-```
-
-**Response** (NDJSON):
-
-```
-{"time_first": "2023-10-31T12:00:00Z", "time_last": "2023-10-31T12:00:00Z", "rrname": "example.com", "rrtype": "A", "rdata": "93.184.216.34", "count": 1, "sensor_id": "sensor1"}
-```
-
-**Use Case**: Process large datasets incrementally for analysis in tools like Splunk or custom scripts.
-
-## Example 5: Query with Metadata
-
-**Goal**: Retrieve DNS records with pagination metadata for a specific RR type.
-
-**Request**:
-
-```bash
-curl -H "Authorization: Bearer xyz123" "http://localhost:8000/query/example.com?rrtype=A&metadata=true&format=json"
-```
-
-**Response**:
-
-```json
-{
-  "data": [
+  "sensors": [
     {
-      "time_first": 1698777600,
-      "time_last": 1698777600,
-      "rrname": "example.com",
-      "rrtype": "A",
-      "rdata": "93.184.216.34",
-      "count": 1,
-      "sensor_id": "sensor1"
+      "sensor_id": "sensor1",
+      "count": 5000
     }
-  ],
-  "total": 1,
-  "next_cursor": null
+  ]
 }
 ```
 
-**Use Case**: Build a paginated UI for displaying DNS records or track the total number of matches.
+### Using JavaScript (`fetch`)
 
-## Example 6: Python Script for Querying
+```javascript
+fetch('http://localhost:8000/info')
+  .then(response => response.json())
+  .then(data => console.log(data))
+  .catch(error => console.error('Error:', error));
+```
 
-**Goal**: Automate queries using Python and the `requests` library.
+## Example 2: Query DNS Records (`/query/{q}`)
 
-**Code**:
+Query records for a specific domain or IP with filters.
+
+### Using `curl` (Domain with CNAME)
+
+Query `www.example.com` for `CNAME` records:
+
+```bash
+curl -H "Authorization: Bearer xyz123" "http://localhost:8000/query/www.example.com?limit=5&rrtype=CNAME&format=json"
+```
+
+**Expected Response**:
+
+```json
+[
+  {
+    "rrname": "www.example.com",
+    "rrtype": "CNAME",
+    "rdata": "example.com",
+    "time_first": 1698777600,
+    "time_last": 1698777600,
+    "count": 1,
+    "sensor_id": "sensor1"
+  }
+]
+```
+
+### Using Python (`httpx`)
+
+Query an IP address:
+
+```python
+import httpx
+
+url = "http://localhost:8000/query/93.184.216.34?limit=5&format=json"
+headers = {"Authorization": "Bearer xyz123"}
+response = httpx.get(url, headers=headers)
+if response.status_code == 200:
+    print(response.json())
+elif response.status_code == 401:
+    print("Error: Invalid token")
+else:
+    print(f"Error: {response.status_code}")
+```
+
+## Example 3: Fuzzy Query (`/fquery/{q}`)
+
+Perform a fuzzy search for domains containing a term.
+
+### Using `curl`
+
+Search for domains containing `example`:
+
+```bash
+curl -H "Authorization: Bearer xyz123" "http://localhost:8000/fquery/example?limit=5"
+```
+
+**Expected Response**:
+
+```json
+[
+  {
+    "rrname": "example.com",
+    "rrtype": "A",
+    "rdata": "93.184.216.34",
+    "time_first": 1698777600,
+    "time_last": 1698777600,
+    "count": 1,
+    "sensor_id": "sensor1"
+  },
+  {
+    "rrname": "example.org",
+    "rrtype": "A",
+    "rdata": "198.51.100.10",
+    "time_first": 1698777600,
+    "time_last": 1698777600,
+    "count": 1,
+    "sensor_id": "sensor1"
+  }
+]
+```
+
+### Using JavaScript (`fetch`)
+
+```javascript
+fetch('http://localhost:8000/fquery/google?limit=3', {
+  headers: {
+    Authorization: 'Bearer xyz123'
+  }
+})
+  .then(response => {
+    if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+    return response.json();
+  })
+  .then(data => console.log(data))
+  .catch(error => console.error('Error:', error));
+```
+
+## Example 4: Stream DNS Records (`/stream/{q}`)
+
+Stream real-time DNS records for a domain or IP via WebSocket.
+
+### Using Python (`websockets`)
+
+Stream `A` records for `example.com`:
+
+```python
+import asyncio
+import websockets
+
+async def stream():
+    uri = "ws://localhost:8000/stream/example.com?rrtype=A"
+    try:
+        async with websockets.connect(uri, extra_headers={"Authorization": "Bearer xyz123"}) as ws:
+            while True:
+                message = await ws.recv()
+                print(message)
+    except websockets.exceptions.InvalidStatusCode as e:
+        print(f"Error: {e}")
+
+asyncio.run(stream())
+```
+
+**Expected Message**:
+
+```json
+{
+  "rrname": "example.com",
+  "rrtype": "A",
+  "rdata": "93.184.216.34",
+  "time_first": 1698777600,
+  "time_last": 1698777600,
+  "count": 1,
+  "sensor_id": "sensor1"
+}
+```
+
+### Using JavaScript (`ws`)
+
+```javascript
+const WebSocket = require('ws');
+
+const ws = new WebSocket('ws://localhost:8000/stream/example.com?rrtype=A', {
+  headers: {
+    Authorization: 'Bearer xyz123'
+  }
+});
+
+ws.on('open', () => console.log('Connected to stream'));
+ws.on('message', (data) => console.log(JSON.parse(data)));
+ws.on('error', (error) => console.error('Error:', error));
+ws.on('close', () => console.log('Disconnected'));
+```
+
+## Example 5: Query in CSV Format
+
+Retrieve records in CSV format for analysis.
+
+### Using `curl`
+
+```bash
+curl -H "Authorization: Bearer xyz123" "http://localhost:8000/query/example.com?format=csv"
+```
+
+**Expected Response**:
+
+```csv
+rrname,rrtype,rdata,time_first,time_last,count,sensor_id
+example.com,A,93.184.216.34,1698777600,1698777600,1,sensor1
+```
+
+### Using Python (`requests`)
 
 ```python
 import requests
 
-url = "http://localhost:8000/query/example.com"
+url = "http://localhost:8000/query/example.com?format=csv"
 headers = {"Authorization": "Bearer xyz123"}
-params = {"limit": 10, "format": "json", "rrtype": "A"}
-
-response = requests.get(url, headers=headers, params=params)
+response = requests.get(url, headers=headers)
 if response.status_code == 200:
-    records = response.json()
-    for record in records:
-        print(f"Domain: {record['rrname']}, IP: {record['rdata']}")
+    with open('records.csv', 'w') as f:
+        f.write(response.text)
 else:
-    print(f"Error: {response.json()['detail']}")
+    print(f"Error: {response.status_code}")
 ```
 
-**Output**:
+## Example 6: Handling Errors
 
+Simulate an invalid token to demonstrate error handling.
+
+### Using `curl`
+
+```bash
+curl -H "Authorization: Bearer invalid_token" "http://localhost:8000/query/example.com"
 ```
-Domain: example.com, IP: 93.184.216.34
+
+**Expected Response**:
+
+```json
+{
+  "detail": "Invalid authentication credentials"
+}
 ```
 
-**Use Case**: Automate DNS record collection for integration with threat intelligence platforms.
+### Using Python (`httpx`)
 
-## Tips
+```python
+import httpx
 
-- **Interactive Testing**: Use the OpenAPI interface at `http://localhost:8000/docs` to test endpoints without writing code.
-- **Authentication**: Always include the bearer token if required (check `generic.json`’s `auth.endpoints`).
-- **Error Handling**: Handle `401 Unauthorized` (invalid token) or `429 Too Many Requests` (rate limit) errors gracefully.
-- **Explore Schemas**: See [Schemas](./schemas.md) for response formats and field details.
+url = "http://localhost:8000/query/example.com"
+headers = {"Authorization": "Bearer invalid_token"}
+response = httpx.get(url, headers=headers)
+if response.status_code == 401:
+    print("Error: Invalid token")
+else:
+    print(response.text)
+```
 
-For endpoint details, see [API Reference](./api-reference.md). For query syntax, see [Querying DNS Records](./querying-dns.md).
+## Troubleshooting
+
+- **401 Unauthorized**:
+  - Verify token in `config/generic.json`.
+  - Ensure `Authorization: Bearer xyz123` header is included.
+- **429 Too Many Requests**:
+  - Check rate limits in `generic.json`:
+    ```json
+    {
+      "rate_limit": {
+        "query": {"requests": 100, "window": 60}
+      }
+    }
+    ```
+  - Wait or adjust limits (see [Configuration](../admin/configuration.md)).
+- **500 Internal Server Error**:
+  - Check server logs:
+    ```bash
+    tail -f pdns.log | grep "ERROR"
+    ```
+  - Ensure database is running (see [Troubleshooting](../admin/troubleshooting.md)).
+
+## Mermaid Diagram: Query Workflow
+
+```mermaid
+graph TD
+    A[Client] -->|Choose Tool: curl/Python/JS| B[Construct Request]
+    B -->|Add Auth Header| C[Send Request]
+    C -->|GET /info| D[FastAPI Server]
+    C -->|GET /query/{q}| E[Authenticate]
+    C -->|GET /fquery/{q}| E
+    C -->|WS /stream/{q}| E
+    E -->|Check Rate Limit| F[Query DB]
+    F -->|Return Data| D
+    D -->|JSON/CSV Response| A
+```
+
+For related guides, see:
+
+- [Querying DNS Data](./querying-dns.md)
+- [API Reference](./api-reference.md)
+- [Schemas](./schemas.md)
+- [Configuration](../admin/configuration.md)
+- [Troubleshooting](../admin/troubleshooting.md)
