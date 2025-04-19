@@ -21,6 +21,7 @@ theme:
 nav:
   - Home: index.md
   - User Guide:
+      - Getting Started: user/getting-started.md
       - Quickstart: user/quickstart.md
       - Querying DNS Data: user/querying-dns.md
       - API Reference: user/api-reference.md
@@ -36,6 +37,8 @@ nav:
       - Scaling: admin/scaling.md
       - Troubleshooting: admin/troubleshooting.md
   - Developer Guide:
+      - Features Overview: dev/features.md
+      - Notifiers Overview: dev/notifiers.md
       - Codebase Overview: dev/codebase-overview.md
       - Contributing: dev/contributing.md
       - API Development: dev/api-development.md
