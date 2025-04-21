@@ -1,10 +1,12 @@
+import os
 import asyncio
-from typing import List
-from scapy.all import rdpcap, DNS, DNSRR, IP
+from typing import Dict, List
+from scapy.all import PcapReader, DNS, DNSRR, IP
 from pypdns import PDNSRecord
 from ...default.helpers import logger
 from ...db.manager import DatabaseManager
 from ...ingestors.base import FrameIngestor
+from ...ingestors.common.utils import parse_line
 
 async def parse_pcap_packet(packet) -> List[PDNSRecord]:
     """Parse a Scapy packet into a list of PDNSRecord objects."""
@@ -18,7 +20,7 @@ async def parse_pcap_packet(packet) -> List[PDNSRecord]:
         # Ensure there are answers and a question section
         if dns.ancount == 0 or not dns.qd:
             return records
-        # Extract query details from the first question (typically one per packet)
+        # Extract query details from the first question
         query = dns.qd[0]
         query_name = query.qname.decode().rstrip(".")
         query_type = query.qtype
@@ -46,18 +48,21 @@ async def parse_pcap_packet(packet) -> List[PDNSRecord]:
         return records
 
 class PCAPFileIngestor(FrameIngestor):
-    def __init__(self, file_path: str, db_manager, config: dict):
+    """Ingestor for PCAP files containing DNS packets."""
+    type = "file_pcap"
+
+    def __init__(self, db_manager: DatabaseManager, config: Dict) -> None:
         super().__init__(db_manager, config)
-        self.passivedns_binary = self.config.get("passivedns")
-        
+        self.passivedns_binary = config.get("passivedns", "")
+
     async def ingest(self) -> None:
         """Ingest a PCAP file and store DNS records in the database."""
         self.running = True
         logger.info({"event": "ingestor_start", "file": self.file_path})
-        try:    
-            if passivedns_binary and os.path.exists(passivedns_binary) and os.access(passivedns_binary, os.X_OK):
-                logger.info({"event": "using_passivedns", "binary": passivedns_binary})
-                await self.ingest_with_passivedns(passivedns_binary)
+        try:
+            if self.passivedns_binary and os.path.exists(self.passivedns_binary) and os.access(self.passivedns_binary, os.X_OK):
+                logger.info({"event": "using_passivedns", "binary": self.passivedns_binary})
+                await self.ingest_with_passivedns(self.passivedns_binary)
             else:
                 logger.info({"event": "using_default_parsing"})
                 await self.ingest_with_scapy()
@@ -69,62 +74,40 @@ class PCAPFileIngestor(FrameIngestor):
 
     async def ingest_with_passivedns(self, passivedns_binary: str) -> None:
         """Parse PCAP file using the passivedns binary."""
-        proc = await asyncio.subprocess.create_subprocess_exec(
-            passivedns_binary, "-I", "-r", self.file_path,
+        proc = await asyncio.create_subprocess_exec(
+            passivedns_binary, "-i", "-r", self.file_path,
             stdout=asyncio.subprocess.PIPE
         )
         while True:
             line = await proc.stdout.readline()
             if not line:
                 break
-            record = self.parse_passivedns_output(line.decode())
+            line_str = line.decode().strip()
+            record = parse_line(line_str)
             if record:
                 await self.db_manager.store_record(record)
                 logger.debug({"event": "ingest_record", "record": record.raw})
+            else:
+                logger.debug({"event": "passivedns_parse_error", "error": "Invalid line", "line": line_str})
         await proc.wait()
         if proc.returncode != 0:
             logger.error({"event": "passivedns_error", "returncode": proc.returncode})
 
     async def ingest_with_scapy(self) -> None:
         """Parse PCAP file using Scapy (default method)."""
-        packets = rdpcap(self.file_path)
-        for packet in packets:
-            if not self.running:
-                break
-            records = await parse_pcap_packet(packet)
-            for rdns in records:
-                await self.db_manager.store_record(rdns)
-                logger.debug({"event": "ingest_record", "record": rdns.raw})
-            await asyncio.sleep(0)
-
-    def parse_passivedns_output(self, line: str) -> Optional[PDNSRecord]:
-        """Parse a line of passivedns output into a PDNSRecord."""
+        self.running = True
+        logger.info({"event": "scapy_parsing_start", "file": self.file_path})
         try:
-            fields = line.strip().split("||")
-            if len(fields) != 10:
-                logger.debug({"event": "passivedns_parse_error", "error": "incorrect field count", "line": line})
-                return None
-            first_seen_str, last_seen_str, count_str, query, query_type, answer, answer_type, ttl, client_ip, server_ip = fields
-
-            # Convert timestamps to epoch integers
-            first_seen = int(datetime.strptime(first_seen_str, "%Y-%m-%d %H:%M:%S").timestamp())
-            last_seen = int(datetime.strptime(last_seen_str, "%Y-%m-%d %H:%M:%S").timestamp())
-            count = int(count_str)
-
-            # Create PDNSRecord
-            record = PDNSRecord(
-                time_first=first_seen,
-                time_last=last_seen,
-                count=count,
-                query_name=query,
-                query_type=query_type,
-                rrname=query,
-                rrtype=answer_type,
-                rdata=[answer],
-                src_ip=server_ip,  # DNS server IP
-                dst_ip=client_ip   # Client IP
-            )
-            return record
+            with PcapReader(self.file_path) as pcap_reader:
+                for packet in pcap_reader:
+                    if not self.running:
+                        break
+                    records = await parse_pcap_packet(packet)
+                    for rdns in records:
+                        await self.db_manager.store_record(rdns)
+                        logger.debug({"event": "ingest_record", "record": rdns.raw})
+                    await asyncio.sleep(0)
         except Exception as e:
-            logger.debug({"event": "passivedns_parse_error", "error": str(e), "line": line})
-            return None
+            logger.error({"event": "scapy_parsing_error", "error": str(e)})
+        finally:
+            self.running = False
