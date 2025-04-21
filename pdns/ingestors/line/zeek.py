@@ -1,14 +1,16 @@
 import json
-from .base import FileIngestor
+from .base import LineIngestor
 from pypdns import PDNSRecord
 
 
-class ZeekIngestor(FileIngestor):
+class ZeekIngestor(LineIngestor):
     """Ingestor for Zeek DNS log files.
 
     Each line is a JSON object representing a Zeek DNS log entry.
     """
 
+    type="zeek"
+    
     async def parse_line(self, line: str) -> PDNSRecord | None:
         """Parse a Zeek DNS log line (JSON) into a PDNSRecord.
 

@@ -5,11 +5,11 @@ from ..default.helpers import logger
 from ..default.exceptions import DNSParseError
 from ..db.manager import DatabaseManager
 from pypdns import PDNSRecord
-from .base import DaemonIngestor
+from .base import StreamIngestor
 from .utils import parse_line
 
 
-class RedisQueueIngestor(DaemonIngestor):
+class RedisQueueIngestor(StreamIngestor):
     """Ingestor for DNS records from a Redis queue.
 
     Pulls messages from a Redis queue, parses them, and stores them in the database.
@@ -17,10 +17,11 @@ class RedisQueueIngestor(DaemonIngestor):
 
     type = "d4redis"  # Identifier for this ingestor type
 
-    def __init__(self, db_manager: DatabaseManager, redis_uri: str) -> None:
-        super().__init__(db_manager)
-        self.redis_uri: str = redis_uri
-        self.redis_client: Optional[aioredis.Redis] = None
+    def __init__(self, db_manager: DatabaseManager, config: dict) -> None:
+        super().__init__(db_manager, config)
+        self.redis_uri: str = config.get("redis_uri", "")
+        if not self.redis_uri:
+            raise ValueError("Missing required config parameter: redis_uri")
 
     async def connect_redis(self) -> aioredis.Redis:
         """Connect to the Redis server based on the provided URI.

@@ -4,10 +4,10 @@ import json
 from ..default.helpers import logger
 from ..db.manager import DatabaseManager
 from pypdns import PDNSRecord
-from .base import DaemonIngestor
+from .base import StreamIngestor
 
 
-class WebSocketIngestor(DaemonIngestor):
+class WebSocketIngestor(StreamIngestor):
     """Ingestor for real-time DNS records via WebSocket.
 
     Connects to a WebSocket URL and processes incoming JSON messages into PDNSRecords.
@@ -15,10 +15,12 @@ class WebSocketIngestor(DaemonIngestor):
 
     type = "websocket"  # Identifier for this ingestor type
 
-    def __init__(self, db_manager: DatabaseManager, ws_url: str) -> None:
+    def __init__(self, db_manager: DatabaseManager, config: dict) -> None:
         super().__init__(db_manager)
-        self.ws_url: str = ws_url
-
+        self.ws_url: str = config.get("ws_url", "")
+        if not self.ws_url:
+            raise ValueError("Missing required config parameter: ws_url")
+        
     async def ingest(self) -> None:
         """Continuously ingest records from the WebSocket connection.
 

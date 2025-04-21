@@ -1,0 +1,1 @@
+"""Package for LineIngestor subclasses that process text files line-by-line."""

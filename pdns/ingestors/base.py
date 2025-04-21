@@ -13,8 +13,9 @@ class Ingestor(ABC):
     the provided DatabaseManager.
     """
 
-    def __init__(self, db_manager: DatabaseManager) -> None:
+    def __init__(self, db_manager: DatabaseManager, config: Dict) -> None:
         self.db_manager: DatabaseManager = db_manager
+        self.config: Dict = config
         self.running: bool = False
 
     @abstractmethod
@@ -27,7 +28,7 @@ class Ingestor(ABC):
         self.running = False
 
 
-class DaemonIngestor(Ingestor, ABC):
+class StreamingIngestor(Ingestor, ABC):
     """Base class for ingestors that run continuously with the server.
 
     Must define a 'type' class variable to identify the ingestor type.
@@ -35,15 +36,18 @@ class DaemonIngestor(Ingestor, ABC):
     type: str
 
 
-class FileIngestor(Ingestor):
+class LineIngestor(Ingestor):
     """Base class for ingestors that process files line-by-line.
 
     Subclasses must implement the `parse_line` method to convert each line into a PDNSRecord.
     """
 
-    def __init__(self, db_manager: DatabaseManager, file_path: str) -> None:
-        super().__init__(db_manager)
-        self.file_path: str = file_path
+    def __init__(self, db_manager: DatabaseManager, config: Dict) -> None:
+        super().__init__(db_manager, config)
+        self.file_path: str = config.get("file_path", "")
+        if not self.file_path:
+            raise ValueError("Missing required config parameter: file_path")
+
 
     async def ingest(self) -> None:
         """Ingest records from the file by reading it line-by-line.
@@ -87,4 +91,17 @@ class FileIngestor(Ingestor):
         Raises:
             Exception: If parsing fails.
         """
+        pass
+
+class FrameIngestor(Ingestor):
+    """Base class for ingestors that process framed or binary file data."""
+    def __init__(self, db_manager: DatabaseManager, config: Dict) -> None:
+        super().__init__(db_manager, config)
+        self.file_path: str = config.get("file_path", "")
+        if not self.file_path:
+            raise ValueError("Missing required config parameter: file_path")
+
+    @abstractmethod
+    async def ingest(self) -> None:
+        """Ingest records from a framed or binary file."""
         pass

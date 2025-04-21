@@ -1,0 +1,1 @@
+"""Package for StreamIngestor subclasses that process continuous data streams."""

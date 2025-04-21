@@ -1,13 +1,15 @@
 import json
-from .base import FileIngestor
+from .base import LineIngestor
 from pypdns import PDNSRecord
 
 
-class NDJSONFileIngestor(FileIngestor):
+class NDJSONFileIngestor(LineIngestor):
     """Ingestor for newline-delimited JSON (NDJSON) files.
 
     Each line is expected to be a JSON object representing a DNS record.
     """
+
+    type="ndjson"
 
     async def parse_line(self, line: str) -> PDNSRecord | None:
         """Parse a newline-delimited JSON line into a PDNSRecord.

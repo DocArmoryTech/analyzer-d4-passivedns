@@ -1,0 +1,1 @@
+"""Package for FrameIngestor subclasses that process binary framed data files."""
