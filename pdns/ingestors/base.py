@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import aiofiles
 import asyncio
+from typing import Dict
 from ..default.helpers import logger
 from ..db.manager import DatabaseManager
 from pypdns import PDNSRecord
@@ -27,8 +28,21 @@ class Ingestor(ABC):
         """Stop the ingestor."""
         self.running = False
 
+class FileIngestor(Ingestor):
+    """Base class for ingestors that process files."""
+    type: str
+    def __init__(self, db_manager: DatabaseManager, config: Dict) -> None:
+        super().__init__(db_manager, config)
+        self.file_path: str = config.get("file_path", "")
+        if not self.file_path:
+            raise ValueError("Missing required config parameter: file_path")
 
-class StreamingIngestor(Ingestor, ABC):
+    @abstractmethod
+    async def ingest(self) -> None:
+        """Ingest records from a file."""
+        pass
+
+class StreamIngestor(Ingestor):
     """Base class for ingestors that run continuously with the server.
 
     Must define a 'type' class variable to identify the ingestor type.
@@ -36,18 +50,11 @@ class StreamingIngestor(Ingestor, ABC):
     type: str
 
 
-class LineIngestor(Ingestor):
+class LineIngestor(FileIngestor):
     """Base class for ingestors that process files line-by-line.
 
     Subclasses must implement the `parse_line` method to convert each line into a PDNSRecord.
     """
-
-    def __init__(self, db_manager: DatabaseManager, config: Dict) -> None:
-        super().__init__(db_manager, config)
-        self.file_path: str = config.get("file_path", "")
-        if not self.file_path:
-            raise ValueError("Missing required config parameter: file_path")
-
 
     async def ingest(self) -> None:
         """Ingest records from the file by reading it line-by-line.
@@ -93,14 +100,8 @@ class LineIngestor(Ingestor):
         """
         pass
 
-class FrameIngestor(Ingestor):
+class FrameIngestor(FileIngestor):
     """Base class for ingestors that process framed or binary file data."""
-    def __init__(self, db_manager: DatabaseManager, config: Dict) -> None:
-        super().__init__(db_manager, config)
-        self.file_path: str = config.get("file_path", "")
-        if not self.file_path:
-            raise ValueError("Missing required config parameter: file_path")
-
     @abstractmethod
     async def ingest(self) -> None:
         """Ingest records from a framed or binary file."""

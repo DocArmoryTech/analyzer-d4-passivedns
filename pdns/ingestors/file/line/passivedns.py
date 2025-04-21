@@ -1,7 +1,6 @@
-from .base import LineIngestor
-from .utils import parse_line
+from ...ingestors.base import LineIngestor
+from ...ingestors.common.utils import parse_line
 from pypdns import PDNSRecord
-
 
 class PDNSIngestor(LineIngestor):
     """Ingestor for passivedns-formatted files.

@@ -2,7 +2,7 @@ import importlib
 import inspect
 import pathlib
 from typing import Dict, Type, List, Union
-from .base import Ingestor, LineIngestor, StreamIngestor, FrameIngestor
+from .base import Ingestor, FileIngestor, LineIngestor, StreamIngestor, FrameIngestor
 from ..db.manager import DatabaseManager
 from ..default.helpers import logger
 
@@ -27,9 +27,10 @@ def _discover_ingestors(base_class: Type[Ingestor], subdir: str) -> Dict[str, Ty
 def load_ingestors(db_manager: DatabaseManager, config: Dict) -> List[Ingestor]:
     """Load and instantiate ingestor subclasses based on configuration."""
     ingestor_classes = {
-        "line": _discover_ingestors(LineIngestor, "line"),
+        "file/line": _discover_ingestors(LineIngestor, "file/line"),
+        "file/json": _discover_ingestors(FileIngestor, "file/json"),
+        "file/frame": _discover_ingestors(FrameIngestor, "file/frame"),
         "stream": _discover_ingestors(StreamIngestor, "stream"),
-        "frame": _discover_ingestors(FrameIngestor, "frame"),
     }
     ingestors = []
     for name, ingestor_config in config.get("ingestors", {}).items():
@@ -56,4 +57,4 @@ def load_ingestors(db_manager: DatabaseManager, config: Dict) -> List[Ingestor]:
             logger.error({"event": "ingestor_instantiation_error", "type": ingestor_type, "name": name, "error": str(e)})
     return ingestors
 
-__all__ = ["Ingestor", "LineIngestor", "StreamIngestor", "FrameIngestor", "load_ingestors"]
+__all__ = ["Ingestor", "FileIngestor", "LineIngestor", "StreamIngestor", "FrameIngestor", "load_ingestors"]
