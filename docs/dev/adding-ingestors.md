@@ -6,6 +6,31 @@ This guide explains how to add a new ingestor to the `analyzer-d4-passivedns` pr
 
 Ingestors are modular and dynamically loaded from `config/generic.json`. Each ingestor resides in `pdns/ingestors/` and implements a class that processes DNS records and interacts with the `DBManager`. Ingestors typically run as separate processes via scripts in `bin/`, independent of the FastAPI server.
 
+## Ingestor Architecture
+
+Ingestors are organized in the `pdns/ingestors/` submodule, with a modular design based on inheritance from base classes defined in `pdns/ingestors/base.py`. The structure is divided into:
+
+- **File Ingestors** (`pdns/ingestors/file/`): Process static files, with subdirectories:
+  - `line/`: Line-based text files (e.g., `pdns`, `ndjson`, `zeek`).
+  - `json/`: JSON array files (e.g., `json`).
+  - `frame/`: Binary framed data (e.g., `dnstap_file`, `pcap_file`).
+- **Stream Ingestors** (`pdns/ingestors/stream/`): Process real-time streams (e.g., `redis_queue`, `dnstap_socket`, `websocket`).
+
+### Base Classes
+
+All ingestors inherit from `Ingestor` or its specialized subclasses:
+
+- **`Ingestor` (base.py)**: Abstract base class with methods `run()` (starts the ingestor) and `process()` (processes data into `PDNSRecord` objects).
+- **`FileIngestor` (base.py)**: For file-based ingestors, handles file reading and iteration.
+- **`LineIngestor` (base.py)**: Extends `FileIngestor` for line-by-line text processing.
+- **`FrameIngestor` (base.py)**: Extends `FileIngestor` for binary framed data.
+- **`StreamIngestor` (base.py)**: For stream-based ingestors, handles continuous data sources.
+
+Each ingestor must implement:
+- `process()`: Converts raw data (e.g., a line, frame, or message) into a list of `PDNSRecord` objects.
+- `run()`: Orchestrates data retrieval and processing, typically calling `process()` and storing results via `DatabaseManager`.
+
+
 ## Steps to Add a New Ingestor
 
 1. **Create the Ingestor File**:

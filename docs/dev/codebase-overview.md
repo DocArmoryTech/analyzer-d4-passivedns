@@ -24,6 +24,9 @@ The codebase is organized for modularity, with clear separation of concerns for 
 
 ## Key Components
 
+The `pdns/` module contains the core logic for Passive DNS processing, including data ingestion, storage, and API serving.
+
+
 ### FastAPI Application (`pdns/main.py`)
 
 - Defines the FastAPI app, mounts routes, and sets up middleware.
@@ -69,21 +72,29 @@ The codebase is organized for modularity, with clear separation of concerns for 
 
 ### Ingestors (`pdns/ingestors/`)
 
-- Modular classes (e.g., `cof.py`, `d4.py`) for data ingestion from sources like COF websockets or D4 servers.
-- Configured in `generic.json`:
-  ```json
-  {
-    "ingestors": {
-      "cof_ingestor": {
-        "type": "cof",
-        "config": {
-          "websocket": "ws://crh.circl.lu:8888"
-        }
-      }
-    }
-  }
-  ```
-- Run via scripts in `bin/` (e.g., `pdns-import-cof.py`).
+The `ingestors/` submodule is responsible for collecting DNS data from various sources and converting it into `PDNSRecord` objects for storage via the `DatabaseManager`. Ingestors are modular, dynamically loaded from `config/generic.json`, and organized into two categories:
+
+- **File Ingestors** (`pdns/ingestors/file/`): Process static files, with subdirectories:
+  - `line/`:
+    - `pdns.py`: Ingests PassiveDNS-formatted text files.
+    - `ndjson.py`: Ingests newline-delimited JSON files.
+    - `zeek.py`: Ingests Zeek DNS log files.
+  - `json/`:
+    - `json.py`: Ingests JSON array files.
+  - `frame/`:
+    - `dnstap_file.py`: Ingests DNSTap framed binary files.
+    - `pcap_file.py`: Ingests PCAP files, optionally using a `passivedns` binary.
+- **Stream Ingestors** (`pdns/ingestors/stream/`):
+  - `redis_queue.py`: Ingests DNS records from a Redis queue.
+  - `dnstap_socket.py`: Ingests live DNSTap streams over Unix socket or TCP.
+  - `websocket.py`: Ingests JSON DNS records from a WebSocket connection.
+
+**Base Classes** (defined in `pdns/ingestors/base.py`):
+- `Ingestor`: Abstract base class with `run()` (starts the ingestor) and `process()` (converts data to `PDNSRecord` objects).
+- `FileIngestor`: Handles file-based ingestion, providing file iteration utilities.
+- `LineIngestor`: Extends `FileIngestor` for line-by-line text processing.
+- `FrameIngestor`: Extends `FileIngestor` for binary framed data.
+- `StreamIngestor`: Handles continuous data streams.
 
 ### Notifiers (`pdns/notifiers/`)
 
@@ -140,21 +151,41 @@ poetry run pytest --cov=pdns
 
 ## Mermaid Diagram: Codebase Architecture
 
+**Mermaid Diagram**:
+
 ```mermaid
 graph TD
-    A[FastAPI App: pdns/main.py] --> B[API Routes: pdns/api/]
-    A --> C[DB Manager: pdns/db/manager.py]
-    A --> D[Notification Manager: pdns/db/manager.py]
-    B --> E[Schemas: pdns/schemas/]
-    C --> F[Backends: pdns/db/backends/]
-    D --> G[Notifiers: pdns/notifiers/]
-    C --> H[Ingestors: pdns/ingestors/]
-    F --> I[Redis/KV Rocks]
-    G --> J[Log/Webhook/Mail/etc.]
-    H --> K[COF/D4/Custom Sources]
-    A --> L[Config: config/generic.json]
-    A --> M[Utilities: pdns/default/]
-    N[Tests: tests/] --> A
+    A[pdns/ingestors/] --> B[base.py]
+    A --> C[file/]
+    A --> D[stream/]
+    B --> E[Ingestor]
+    B --> F[FileIngestor]
+    B --> G[StreamIngestor]
+    F --> H[LineIngestor]
+    F --> I[FrameIngestor]
+    C --> J[line/]
+    C --> K[json/]
+    C --> L[frame/]
+    J --> M[pdns.py]
+    J --> N[ndjson.py]
+    J --> O[zeek.py]
+    K --> P[json.py]
+    L --> Q[dnstap_file.py]
+    L --> R[pcap_file.py]
+    D --> S[redis_queue.py]
+    D --> T[dnstap_socket.py]
+    D --> U[websocket.py]
+    M -->|Inherits| H
+    N -->|Inherits| H
+    O -->|Inherits| H
+    P -->|Inherits| F
+    Q -->|Inherits| I
+    R -->|Inherits| I
+    S -->|Inherits| G
+    T -->|Inherits| G
+    U -->|Inherits| G
+    E -->|Interacts| V[DatabaseManager]
+    V --> W[Redis/KV Rocks]
 ```
 
 ## Getting Started

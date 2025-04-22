@@ -1,176 +1,271 @@
 # Ingestors
 
-This guide explains how to configure and manage ingestors in the `analyzer-d4-passivedns` server, a FastAPI-based Passive DNS server compliant with the [Passive DNS - Common Output Format (draft-dulaunoy-dnsop-passive-dns-cof)](https://tools.ietf.org/html/draft-dulaunoy-dnsop-passive-dns-cof). Ingestors are responsible for collecting DNS data from sources like D4 sensors, COF websocket streams, or custom feeds, and storing them in the configured database backend (e.g., Redis, KV Rocks).
+This guide describes the ingestors available in the `analyzer-d4-passivedns` project, a FastAPI-based Passive DNS server compliant with the [Passive DNS - Common Output Format (draft-dulaunoy-dnsop-passive-dns-cof)](https://tools.ietf.org/html/draft-dulaunoy-dnsop-passive-dns-cof). Ingestors collect DNS data from various sources (e.g., files, streams) and store it in the database (e.g., Redis, KV Rocks) using the `DatabaseManager`.
 
 ## Overview
 
-Ingestors are modular and dynamically loaded from `config/generic.json`. Each ingestor is defined in the `ingestors` section and corresponds to a Python class in `pdns/ingestors/`. Common ingestors include:
+Ingestors are modular, dynamically loaded from `config/generic.json`, and organized into two main categories: **File Ingestors** (processing static files) and **Stream Ingestors** (processing continuous data streams). Each ingestor is a subclass of `Ingestor`, with specialized base classes (`FileIngestor`, `LineIngestor`, `FrameIngestor`, `StreamIngestor`) defined in `pdns/ingestors/base.py`. Ingestors typically run as separate processes via scripts in `bin/`.
 
-- **COF Ingestor**: Processes data from COF websocket streams (e.g., `ws://crh.circl.lu:8888`).
-- **D4 Ingestor**: Connects to D4 servers for DNS record ingestion.
-- **Custom Ingestors**: User-defined ingestors for specific data sources.
+### File Ingestors
+- **Line-Based**: Process text files line-by-line (e.g., `pdns`, `ndjson`, `zeek`).
+- **JSON-Based**: Process JSON arrays (e.g., `json`).
+- **Frame-Based**: Process binary framed data (e.g., `dnstap_file`, `pcap_file`).
+
+### Stream Ingestors
+- Process real-time data streams (e.g., `redis_queue`, `dnstap_socket`, `websocket`).
+
+## Available Ingestors
+
+### File Ingestors
+
+#### `pdns` (PassiveDNS-Formatted Files)
+- **Description**: Ingests line-based files formatted in the PassiveDNS format, where each line contains fields like timestamp, query name, and response data.
+- **Config**:
+  - `file_path` (string, required): Path to the PassiveDNS file.
+- **Example**:
+  ```json
+  {
+    "ingestors": {
+      "pdns_ingestor": {
+        "type": "pdns",
+        "config": {
+          "file_path": "/path/to/pdns.log"
+        }
+      }
+    }
+  }
+  ```
+
+#### `ndjson` (Newline-Delimited JSON Files)
+- **Description**: Ingests NDJSON files where each line is a JSON object representing a DNS record.
+- **Config**:
+  - `file_path` (string, required): Path to the NDJSON file.
+- **Example**:
+  ```json
+  {
+    "ingestors": {
+      "ndjson_ingestor": {
+        "type": "ndjson",
+        "config": {
+          "file_path": "/path/to/dns.ndjson"
+        }
+      }
+    }
+  }
+  ```
+
+#### `zeek` (Zeek DNS Log Files)
+- **Description**: Ingests Zeek DNS log files, where each line is a JSON object containing DNS query details.
+- **Config**:
+  - `file_path` (string, required): Path to the Zeek log file.
+- **Example**:
+  ```json
+  {
+    "ingestors": {
+      "zeek_ingestor": {
+        "type": "zeek",
+        "config": {
+          "file_path": "/path/to/zeek_dns.log"
+        }
+      }
+    }
+  }
+  ```
+
+#### `json` (JSON Array Files)
+- **Description**: Ingests JSON files containing an array of DNS record objects.
+- **Config**:
+  - `file_path` (string, required): Path to the JSON file.
+- **Example**:
+  ```json
+  {
+    "ingestors": {
+      "json_ingestor": {
+        "type": "json",
+        "config": {
+          "file_path": "/path/to/dns.json"
+        }
+      }
+    }
+  }
+  ```
+
+#### `dnstap_file` (DNSTap Framed Files)
+- **Description**: Ingests DNSTap files containing framed binary DNS data, parsed into `PDNSRecord` objects.
+- **Config**:
+  - `file_path` (string, required): Path to the DNSTap file.
+- **Example**:
+  ```json
+  {
+    "ingestors": {
+      "dnstap_ingestor": {
+        "type": "file_dnstap",
+        "config": {
+          "file_path": "/path/to/dnstap.bin"
+        }
+      }
+    }
+  }
+  ```
+
+#### `pcap_file` (PCAP Files)
+- **Description**: Ingests PCAP files containing DNS packets, parsed using Scapy or an optional `passivedns` binary.
+- **Config**:
+  - `file_path` (string, required): Path to the PCAP file.
+  - `passivedns` (string, optional): Path to the `passivedns` binary for parsing.
+- **Example**:
+  ```json
+  {
+    "ingestors": {
+      "pcap_ingestor": {
+        "type": "file_pcap",
+        "config": {
+          "file_path": "/path/to/dns.pcap",
+          "passivedns": "/usr/bin/passivedns"
+        }
+      }
+    }
+  }
+  ```
+
+### Stream Ingestors
+
+#### `redis_queue` (Redis Queue)
+- **Description**: Ingests DNS records from a Redis queue, parsing each message as a PassiveDNS-formatted line.
+- **Config**:
+  - `redis_uri` (string, required): Redis connection URI (e.g., `redis://localhost:6379/queue_name`, `host:port:queue`, or `socket:queue`).
+- **Example**:
+  ```json
+  {
+    "ingestors": {
+      "redis_ingestor": {
+        "type": "d4redis",
+        "config": {
+          "redis_uri": "redis://localhost:6379/dns_queue"
+        }
+      }
+    }
+  }
+  ```
+
+#### `dnstap_socket` (DNSTap Socket)
+- **Description**: Ingests live DNSTap streams over Unix socket or TCP, processing framed DNS messages.
+- **Config**:
+  - `connection_type` (string, required): `unix` or `tcp`.
+  - `address` (string, required): Socket path (for `unix`) or IP/host (for `tcp`).
+  - `port` (integer, optional): TCP port (required for `tcp`).
+- **Example**:
+  ```json
+  {
+    "ingestors": {
+      "dnstap_socket_ingestor": {
+        "type": "stream_dnstap",
+        "config": {
+          "connection_type": "tcp",
+          "address": "127.0.0.1",
+          "port": 6000
+        }
+      }
+    }
+  }
+  ```
+
+#### `websocket` (WebSocket)
+- **Description**: Ingests real-time DNS records from a WebSocket connection, processing JSON messages.
+- **Config**:
+  - `ws_url` (string, required): WebSocket URL (e.g., `ws://example.com/dns`).
+- **Example**:
+  ```json
+  {
+    "ingestors": {
+      "websocket_ingestor": {
+        "type": "websocket",
+        "config": {
+          "ws_url": "ws://example.com/dns"
+        }
+      }
+    }
+  }
+  ```
 
 ## Configuration
 
-Ingestors are configured in `config/generic.json` under the `ingestors` key. Each ingestor requires a unique name, type, and configuration settings.
+Ingestors are configured in `config/generic.json` under the `ingestors` key. Each ingestor requires:
+- `type`: Matches the ingestor’s type (e.g., `pdns`, `file_dnstap`).
+- `config`: Source-specific settings (e.g., `file_path`, `redis_uri`).
 
-### Example Configuration
+Validate configurations with:
+
+```bash
+python tools/validate_config_files.py --check
+```
+
+### Example `generic.json` with Multiple Ingestors
 
 ```json
 {
   "ingestors": {
-    "cof_ingestor": {
-      "type": "cof",
+    "pdns_ingestor": {
+      "type": "pdns",
       "config": {
-        "websocket": "ws://crh.circl.lu:8888",
-        "frequency": "realtime"
+        "file_path": "/path/to/pdns.log"
       }
     },
-    "d4_ingestor": {
-      "type": "d4",
+    "redis_ingestor": {
+      "type": "d4redis",
       "config": {
-        "server": "127.0.0.1:6380",
-        "uuid": "6072e072-bfaa-4395-9bb1-cdb3b470d715",
-        "frequency": "daily"
+        "redis_uri": "redis://localhost:6379/dns_queue"
       }
     }
   }
 }
 ```
 
-- **Fields**:
-  - `<ingestor_name>`: Unique identifier (e.g., `cof_ingestor`).
-  - `type`: Ingestor type (`cof`, `d4`, or custom).
-  - `config`: Source-specific settings (e.g., `websocket` URL, `server` address, `uuid`).
-  - `frequency` (optional): Ingestion schedule (`realtime`, `daily`, `hourly`).
-
-### Validation
-
-- Validate the configuration:
-  ```bash
-  python tools/validate_config_files.py --check
-  ```
-- Update missing fields from `generic.json.sample`:
-  ```bash
-  python tools/validate_config_files.py --update
-  ```
-
 ## Running Ingestors
 
-Ingestors run as separate processes from the main FastAPI server and are managed via command-line scripts in `bin/`.
+Ingestors are typically run as separate processes using scripts in `bin/`. For example, to run the `pdns` ingestor:
 
-1. **Set Environment Variable**:
-   - Ensure `PDNS_HOME` is set:
-     ```bash
-     export PDNS_HOME=/path/to/analyzer-d4-passivedns
-     ```
+```bash
+poetry run python bin/pdns-import-pdns.py --file_path /path/to/pdns.log
+```
 
-2. **Start the COF Ingestor**:
-   - For a COF websocket stream:
-     ```bash
-     poetry run python bin/pdns-import-cof.py --websocket ws://crh.circl.lu:8888
-     ```
-   - This connects to the specified websocket and processes records in real-time.
+For production, configure ingestors as systemd services:
 
-3. **Start the D4 Ingestor**:
-   - For a D4 server:
-     ```bash
-     poetry run python bin/pdns-ingestion.py
-     ```
-   - Ensure `etc/analyzer.conf` is configured with D4 server details if not using `generic.json`.
+```bash
+sudo systemctl enable pdns-pdns.service
+sudo systemctl start pdns-pdns.service
+```
 
-4. **Monitor Logs**:
-   - Check `pdns.log` (configured in `config/logging.json`) for ingestion activity:
-     ```bash
-     tail -f pdns.log | grep "ingestor"
-     ```
-   - Example log:
-     ```
-     [2025-04-19 10:00:00] INFO: cof_ingestor processed 100 records
-     ```
-
-## Managing Ingestors
-
-- **Starting Ingestors**:
-  - Run ingestors in the background using a process manager like `systemd` or `supervisord`:
-    ```bash
-    poetry run python bin/pdns-import-cof.py --websocket ws://crh.circl.lu:8888 &
-    ```
-
-- **Stopping Ingestors**:
-  - Find the process ID:
-    ```bash
-    ps aux | grep pdns-import-cof
-    ```
-  - Terminate the process:
-    ```bash
-    kill <pid>
-    ```
-
-- **Scaling**:
-  - Run multiple ingestors for different sources by adding entries to `generic.json`.
-  - Ensure database capacity (e.g., Redis memory) supports the ingestion rate.
-
-## Troubleshooting Ingestors
-
-- **Symptom**: Ingestor fails to start or logs connection errors.
-  - **Solution**:
-    1. Verify the source URL or server address in `generic.json`.
-    2. Test connectivity:
-       ```bash
-       curl ws://crh.circl.lu:8888
-       ```
-    3. Check logs for specific errors:
-       ```bash
-       tail -f pdns.log | grep "ERROR"
-       ```
-
-- **Symptom**: No data ingested.
-  - **Solution**:
-    1. Ensure `rrset_supported` in `generic.json` includes desired record types:
-       ```json
-       {
-         "rrset_supported": ["A", "AAAA", "CNAME"]
-       }
-       ```
-    2. Check `excludesubstrings` for accidental filtering:
-       ```json
-       {
-         "excludesubstrings": []
-       }
-       ```
-    3. Update `rrtypes.json`:
-       ```bash
-       python tools/3rdparty.py
-       ```
-
-- **Symptom**: High database load.
-  - **Solution**:
-    1. Adjust `expiration` in `generic.json` to reduce record retention:
-       ```json
-       {
-         "expiration": { "A": 86400, "AAAA": 86400 }
-       }
-       ```
-    2. Monitor database metrics:
-       ```bash
-       redis-cli -p 6379 INFO MEMORY
-       ```
+See [Server Management](../admin/management.md) for details.
 
 ## Best Practices
 
-- **Secure Configurations**: Protect sensitive fields like `uuid` in `generic.json` with file permissions:
+- **Error Handling**: Ingestors log errors to `pdns.log` without stopping. Monitor logs:
   ```bash
-  chmod 600 config/generic.json
+  tail -f pdns.log | grep "ERROR"
   ```
-- **Log Monitoring**: Regularly check `pdns.log` for ingestion errors or warnings.
-- **Source Validation**: Test data sources before adding to `generic.json` to ensure reliability.
-- **Incremental Scaling**: Start with one ingestor and monitor performance before adding more.
+- **Performance**: Use `FrameIngestor` for large binary files (e.g., `dnstap_file`, `pcap_file`) and `StreamIngestor` for high-throughput streams.
+- **Validation**: Ensure `file_path` or connection details are valid before starting.
+- **Security**: Restrict access to files and sockets:
+  ```bash
+  chmod 600 /path/to/dns.ndjson
+  ```
+- **Testing**: Test ingestors with sample data before production deployment.
 
-For related guides, see:
+## Mermaid Diagram: Ingestor Architecture
 
-- [Installation](./installation.md)
-- [Configuration](./configuration.md)
-- [Server Management](./management.md)
-- [Troubleshooting](./troubleshooting.md)
-- [Notifiers](./notifiers.md)
+```mermaid
+graph TD
+    A[FastAPI Server] --> B[DatabaseManager]
+    B --> C[Redis/KV Rocks]
+    D[File Ingestors] -->|Store Records| B
+    E[Stream Ingestors] -->|Store Records| B
+    D -->|Line-Based| F[pdns, ndjson, zeek]
+    D -->|JSON-Based| G[json]
+    D -->|Frame-Based| H[dnstap_file, pcap_file]
+    E --> I[redis_queue, dnstap_socket, websocket]
+    F -->|Read Files| J[Text Files]
+    G -->|Read Files| K[JSON Files]
+    H -->|Read Files| L[Binary Files]
+    I -->|Connect| M[Redis, Sockets, WebSocket]
+```
