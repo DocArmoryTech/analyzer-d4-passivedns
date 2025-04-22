@@ -26,6 +26,9 @@ redis = { version = ">=5.2.1,<6.0.0", optional = true }  # For synchronous Redis
 ndjson = { version = ">=0.3.1,<0.4.0", optional = true }  # For NDJSON parsing (if not replaced by built-in json)
 websocket-client = { version = ">=1.8.0,<2.0.0", optional = true }  # For sync WebSocket (if still used)
 tornado = { version = ">=6.4.2,<7.0.0", optional = true }  # For backwards compatibility
+scapy = "^2.6.1"
+protobuf = "^6.30.2"
+fstrm = "^0.6.1"
 
 [tool.poetry.extras]
 legacy = ["redis", "ndjson", "websocket-client", "tornado"]  # Group original deps as optional
