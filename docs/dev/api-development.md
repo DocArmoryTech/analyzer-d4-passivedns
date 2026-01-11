@@ -78,9 +78,9 @@ The API is built using FastAPI, providing endpoints like `/info`, `/query/{q}`, 
          "endpoints": {
            "custom": {"auth": "bearer"}
          },
-         "tokens": {
-           "user": "xyz123"
-         }
+         "tokens": [
+           {"name": "user", "value": "xyz123"}
+         ]
        }
      }
      ```

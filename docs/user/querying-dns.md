@@ -18,9 +18,9 @@ Example `generic.json` snippet:
     "endpoints": {
       "query": {"auth": "bearer"}
     },
-    "tokens": {
-      "user": "xyz123"
-    }
+    "tokens": [
+      {"name": "user", "value": "xyz123"}
+    ]
   }
 }
 ```

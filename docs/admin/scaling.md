@@ -50,9 +50,9 @@ Update `generic.json` with multiple ingestors:
 Run each ingestor as a separate process or container:
 
 ```bash
-poetry run python bin/pdns-import-cof.py --websocket ws://crh.circl.lu:8888 &
-poetry run python bin/pdns-import-cof.py --websocket ws://other.source:8888 &
-poetry run python bin/pdns-ingestion.py &
+poetry run pdns ingest --websocket ws://crh.circl.lu:8888 &
+poetry run pdns ingest --websocket ws://other.source:8888 &
+poetry run pdns ingest --redis-queue host:port:queue_name &
 ```
 
 For Docker, extend `docker-compose.yml`:
@@ -61,13 +61,13 @@ For Docker, extend `docker-compose.yml`:
 services:
   pdns-cof1:
     build: .
-    command: ["poetry", "run", "python", "bin/pdns-import-cof.py", "--websocket", "ws://crh.circl.lu:8888"]
+    command: ["poetry", "run", "pdns", "ingest", "--websocket", "ws://crh.circl.lu:8888"]
   pdns-cof2:
     build: .
-    command: ["poetry", "run", "python", "bin/pdns-import-cof.py", "--websocket", "ws://other.source:8888"]
+    command: ["poetry", "run", "pdns", "ingest", "--websocket", "ws://other.source:8888"]
   pdns-d4:
     build: .
-    command: ["poetry", "run", "python", "bin/pdns-ingestion.py"]
+    command: ["poetry", "run", "pdns", "ingest", "--redis-queue", "host:port:queue_name"]
 ```
 
 ### Step 3: Monitor Ingestors

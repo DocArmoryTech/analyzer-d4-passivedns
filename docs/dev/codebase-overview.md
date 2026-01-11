@@ -45,9 +45,9 @@ The `pdns/` module contains the core logic for Passive DNS processing, including
       "endpoints": {
         "query": {"auth": "bearer"}
       },
-      "tokens": {
-        "user": "xyz123"
-      }
+      "tokens": [
+        {"name": "user", "value": "xyz123"}
+      ]
     }
   }
   ```

@@ -39,6 +39,9 @@ pdns-import = "pdns.cli:main"  # Maps to cli.py (adjust if split into specific i
 pdns-ingestion = "pdns.cli:main"  # Unified ingestion script
 validate-config = "tools.validate_config_files:main"  # New validation script
 
+# Primary CLI entry point
+pdns = "pdns.cli:main"
+
 # Removed pdns-import-cof (assumed merged into cli.py) and install-kvrocks (bash script not portable in Poetry)
 
 [tool.poetry.group.dev.dependencies]

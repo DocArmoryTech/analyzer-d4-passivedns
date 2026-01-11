@@ -75,9 +75,9 @@ Edit `config/generic.json` to ensure Redis is configured:
       "stream": {"auth": "bearer"},
       "info": {"auth": "none"}
     },
-    "tokens": {
-      "user": "xyz123"
-    }
+    "tokens": [
+      {"name": "user", "value": "xyz123"}
+    ]
   }
 }
 ```
@@ -138,7 +138,7 @@ Expected response (assuming data is ingested):
 To populate the database, start a COF ingestor:
 
 ```bash
-poetry run python bin/pdns-import-cof.py --websocket ws://crh.circl.lu:8888 &
+poetry run pdns ingest --websocket ws://crh.circl.lu:8888 &
 ```
 
 Add it to `config/generic.json`:

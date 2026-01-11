@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 import logging
+import logging.config
 import os
 from functools import lru_cache
 from pathlib import Path
@@ -15,6 +16,7 @@ from .exceptions import InvalidConfigError, MissingEnv
 _configs: dict[str, dict[str, Any]] = {}
 logger = logging.getLogger("Helpers")
 _config_lock = asyncio.Lock()
+LOGGING_CONFIG_FILE: str | None = None
 
 @lru_cache(64)
 def get_homedir() -> Path:
@@ -117,3 +119,55 @@ def get_config(config_type: str, entry: str | None = None, default: Any = None) 
             logger.warning(f"Entry {entry} not found in {config_type}, returning default: {default}")
         return result
     return config
+
+
+def load_logging_config() -> None:
+    """Load logging configuration from config/logging.json.
+
+    Supports two formats:
+    - A full logging dictConfig (with a top-level "version" key).
+    - A simple JSON object with "level", "file", and "format" fields.
+
+    Falls back to a basic INFO-level configuration if anything fails.
+    """
+
+    # Determine logging config path, allowing tests to override via LOGGING_CONFIG_FILE.
+    try:
+        path = Path(LOGGING_CONFIG_FILE) if LOGGING_CONFIG_FILE else get_homedir() / "config" / "logging.json"
+    except MissingEnv as e:
+        # If home cannot be resolved, just configure basic logging.
+        logging.basicConfig(level=logging.INFO)
+        logger.error({"event": "logging_config_env_missing", "error": str(e)})
+        return
+
+    if not path.exists():
+        logging.basicConfig(level=logging.INFO)
+        logger.warning({"event": "logging_config_missing", "path": str(path)})
+        return
+
+    try:
+        with path.open("r") as f:
+            config = json.load(f)
+
+        # If this looks like a dictConfig, delegate to logging.config.
+        if isinstance(config, dict) and "version" in config:
+            logging.config.dictConfig(config)
+            logger.info({"event": "logging_config_loaded", "mode": "dictConfig", "path": str(path)})
+            return
+
+        # Otherwise, interpret it as a simple shorthand config.
+        level_name = str(config.get("level", "INFO")).upper()
+        level = getattr(logging, level_name, logging.INFO)
+        fmt = config.get("format", "%(asctime)s %(levelname)s: %(message)s")
+        log_file = config.get("file")
+
+        if log_file:
+            logging.basicConfig(level=level, format=fmt, filename=log_file)
+        else:
+            logging.basicConfig(level=level, format=fmt)
+
+        logger.info({"event": "logging_config_loaded", "mode": "simple", "path": str(path)})
+    except Exception as e:
+        # On any error, fall back to a safe default.
+        logging.basicConfig(level=logging.INFO)
+        logger.error({"event": "logging_config_error", "path": str(path), "error": str(e)})

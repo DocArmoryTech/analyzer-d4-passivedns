@@ -229,9 +229,9 @@ Authentication is configured in `config/generic.json`:
       "stream": {"auth": "bearer"},
       "info": {"auth": "none"}
     },
-    "tokens": {
-      "user": "xyz123"
-    }
+    "tokens": [
+      {"name": "user", "value": "xyz123"}
+    ]
   }
 }
 ```

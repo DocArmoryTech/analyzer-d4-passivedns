@@ -77,9 +77,9 @@ python tools/validate_config_files.py --update
       "fquery": {"auth": "bearer"},
       "stream": {"auth": "bearer"}
     },
-    "tokens": {
-      "user": "xyz123"
-    }
+    "tokens": [
+      {"name": "user", "value": "xyz123"}
+    ]
   },
   "rate_limit": {
     "query": {"requests": 100, "window": 60},
@@ -150,7 +150,7 @@ python tools/validate_config_files.py --update
 
 5. **Authentication**:
    - `endpoints`: Specifies auth type (`bearer` or `none`) per endpoint.
-   - `tokens`: Key-value pairs of user IDs and tokens.
+  - `tokens`: List of token objects (e.g., `{ "name": "user", "value": "xyz123" }`).
    - Example:
      ```json
      {
@@ -158,9 +158,9 @@ python tools/validate_config_files.py --update
          "endpoints": {
            "info": {"auth": "none"}
          },
-         "tokens": {
-           "admin": "xyz123"
-         }
+         "tokens": [
+           {"name": "admin", "value": "xyz123"}
+         ]
        }
      }
      ```

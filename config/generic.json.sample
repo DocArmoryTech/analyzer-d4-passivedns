@@ -1,13 +1,14 @@
 {
   "_notes": {
     "database": "Database backend configuration. 'type' specifies the backend (e.g., 'redis'), 'config' provides connection details.",
-    "tokens": "List of bearer tokens for authentication. Each token has a 'value' and optional metadata like 'name'.",
+    "tokens": "(Deprecated at top level) — bearer tokens now live in auth.tokens and should be configured there.",
     "auth": "Authentication modes per endpoint. 'none' = no auth, 'bearer' = token required, 'openid' = not implemented.",
-    "exclude": "List of domain substrings to exclude from ingestion/import (e.g., ['spamhaus.org']).",
-    "expiration": "Expiration times (in seconds) for DNS records by numeric RR type (as strings).",
-    "rrset_supported": "List of supported RR types (as strings) for validation or filtering.",
-    "ingestors": "Array of ingestors. Each entry includes 'type' (e.g., 'redis_queue') and 'config'.",
-    "notifiers": "Array of notifiers. Each entry includes 'type' (e.g., 'log'), 'name', 'filter', and optional config."
+    "excludesubstrings": "List of domain substrings to exclude from ingestion/import (e.g., ['spamhaus.org']).",
+    "expiration": "Expiration times (in seconds) for DNS records by RR type (e.g., 'A', 'AAAA'). Numeric codes are also accepted.",
+    "rrset_supported": "List of supported RR types (as strings, typically RR names like 'A', 'AAAA').",
+    "ingestors": "Dict of ingestors keyed by name. Each entry includes 'type' (e.g., 'pdns', 'ndjson', 'd4redis') and a 'config' object.",
+    "notifiers": "Array of notifiers. Each entry includes 'type' (e.g., 'log'), 'name', 'filter', and optional config.",
+    "rate_limit": "Per-endpoint rate limiting configuration as objects with 'requests' and 'window' (seconds)."
   },
   "database": {
     "type": "redis",
@@ -17,38 +18,50 @@
       "db": 0
     }
   },
-  "tokens": [
-    {"name": "admin_token", "value": "supersecretadmintoken123"},
-    {"name": "user_token", "value": "basicusertoken456"}
-  ],
   "auth": {
     "endpoints": {
       "info": {"auth": "none"},
       "query": {"auth": "bearer"},
       "fquery": {"auth": "bearer"},
       "stream": {"auth": "none"}
-    }
+    },
+    "tokens": [
+      {"name": "admin_token", "value": "supersecretadmintoken123"},
+      {"name": "user_token", "value": "basicusertoken456"}
+    ]
   },
-  "exclude": ["spamhaus.org", "asn.cymru.com"],
+  "excludesubstrings": ["spamhaus.org", "asn.cymru.com"],
   "expiration": {
-    "16": 24000,
-    "99": 26000
+    "A": 86400,
+    "AAAA": 86400,
+    "CNAME": 86400
   },
-  "rrset_supported": ["1", "2", "5", "15", "16", "28", "33", "46"],
-  "ingestors": [
-    {
-      "type": "redis_queue",
-      "config": {"connection": "127.0.0.1:6379:analyzer:8:uuid"}
+  "rrset_supported": ["A", "AAAA", "CNAME"],
+  "ingestors": {
+    "pdns_ingestor": {
+      "type": "pdns",
+      "config": {
+        "file_path": "/path/to/pdns.log"
+      }
     },
-    {
-      "type": "websocket",
-      "config": {"url": "wss://example.com/dns-feed", "retry_interval": 10}
+    "ndjson_ingestor": {
+      "type": "ndjson",
+      "config": {
+        "file_path": "/path/to/dns.ndjson"
+      }
     },
-    {
-      "type": "ndjson_file",
-      "config": {"file_path": "/path/to/dns_records.ndjson"}
+    "redis_ingestor": {
+      "type": "d4redis",
+      "config": {
+        "redis_uri": "redis://localhost:6379/dns_queue"
+      }
     }
-  ],
+  },
+  "rate_limit": {
+    "query": {"requests": 100, "window": 60},
+    "fquery": {"requests": 50, "window": 60},
+    "stream": {"requests": 10, "window": 60}
+  },
   "notifiers": [
     {
       "type": "email",

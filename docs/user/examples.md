@@ -15,9 +15,9 @@ This guide provides practical examples for querying the `analyzer-d4-passivedns`
         "stream": {"auth": "bearer"},
         "info": {"auth": "none"}
       },
-      "tokens": {
-        "user": "xyz123"
-      }
+      "tokens": [
+        {"name": "user", "value": "xyz123"}
+      ]
     }
   }
   ```

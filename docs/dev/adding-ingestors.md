@@ -100,30 +100,7 @@ Each ingestor must implement:
      - `type`: Must match the ingestor class (e.g., `custom`).
      - `config`: Source-specific settings (e.g., `source`, `frequency`).
 
-3. **Create a Runner Script**:
-
-   - Create `bin/pdns-import-custom.py`:
-     ```python
-     import asyncio
-     from pdns.db.manager import DBManager
-     from pdns.ingestors.custom import CustomIngestor
-     
-     async def main():
-         db = DBManager()  # Loads from generic.json
-         config = {"source": "https://api.example.com/dns", "frequency": "realtime"}
-         ingestor = CustomIngestor(config, db)
-         await ingestor.run()
-     
-     if __name__ == "__main__":
-         asyncio.run(main())
-     ```
-
-   - Make executable:
-     ```bash
-     chmod +x bin/pdns-import-custom.py
-     ```
-
-4. **Update Ingestor Loading**:
+3. **Wire the Ingestor into the CLI**:
 
    - Ensure `pdns/ingestors/__init__.py` exports the new ingestor:
      ```python
@@ -180,12 +157,11 @@ Each ingestor must implement:
 graph TD
     A[Plan Ingestor] --> B[Create pdns/ingestors/custom.py]
     B --> C[Register in generic.json]
-    C --> D[Create bin/pdns-import-custom.py]
-    D --> E[Update pdns/ingestors/__init__.py]
-    E --> F[Write Tests]
-    F --> G[Update ingestors.md]
-    G --> H[Run Tests]
-    H --> I[Submit PR]
+    C --> D[Update pdns/ingestors/__init__.py]
+    D --> E[Write Tests]
+    E --> F[Update ingestors.md]
+    F --> G[Run Tests]
+    G --> H[Submit PR]
 ```
 
 ## Best Practices
@@ -258,8 +234,8 @@ graph TD
    }
    ```
 
-3. Create `bin/pdns-import-rest-api.py` and update `pdns/ingestors/__init__.py`.
-4. Write tests and update `ingestors.md`.
+3. Update `pdns/ingestors/__init__.py`.
+4. Wire it into operational flows via `pdns ingest` and update `ingestors.md`.
 
 For related guides, see:
 

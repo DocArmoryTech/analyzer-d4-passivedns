@@ -1,5 +1,5 @@
 # pdns/rrtypes.py
-from .default.helpers import get_config
+from .default.helpers import get_config, logger
 from enum import Enum
 from typing import List
 from .exceptions import InvalidConfigError

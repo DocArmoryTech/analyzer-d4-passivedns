@@ -78,15 +78,15 @@ Ingestors run as separate processes to collect DNS data.
 
 1. **Start a COF Ingestor**:
 
-   ```bash
-   poetry run python bin/pdns-import-cof.py --websocket ws://crh.circl.lu:8888
-   ```
+  ```bash
+  poetry run pdns ingest --websocket ws://crh.circl.lu:8888
+  ```
 
-2. **Start a D4 Ingestor**:
+2. **Start a D4 Ingestor** (Redis queue based):
 
-   ```bash
-   poetry run python bin/pdns-ingestion.py
-   ```
+  ```bash
+  poetry run pdns ingest --redis-queue host:port:queue_name
+  ```
 
 3. **Run as a Service**:
 
@@ -103,7 +103,7 @@ Ingestors run as separate processes to collect DNS data.
      User=<user>
      WorkingDirectory=/path/to/analyzer-d4-passivedns
      Environment="PDNS_HOME=/path/to/analyzer-d4-passivedns"
-     ExecStart=/path/to/poetry run python bin/pdns-import-cof.py --websocket ws://crh.circl.lu:8888
+    ExecStart=/path/to/poetry run pdns ingest --websocket ws://crh.circl.lu:8888
      Restart=always
      
      [Install]
@@ -199,7 +199,7 @@ Ingestors run as separate processes to collect DNS data.
      ```
    - Run each ingestor separately:
      ```bash
-     poetry run python bin/pdns-import-cof.py --websocket ws://other.source:8888
+    poetry run pdns ingest --websocket ws://other.source:8888
      ```
 
 2. **Database Scaling**:
@@ -284,9 +284,9 @@ Ingestors run as separate processes to collect DNS data.
       "endpoints": {
         "query": {"auth": "bearer"}
       },
-      "tokens": {
-        "user": "xyz123"
-      }
+      "tokens": [
+        {"name": "user", "value": "xyz123"}
+      ]
     }
   }
   ```

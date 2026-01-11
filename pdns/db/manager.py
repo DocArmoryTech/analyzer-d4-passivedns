@@ -1,5 +1,6 @@
 # pdns/db/manager.py
 from ..default.helpers import get_config, logger
+from ..rrtypes import RRType
 from ..default.exceptions import DBConnectionError, InvalidConfigError
 from ..schemas import DNSRecord
 from .base import Database
@@ -36,10 +37,23 @@ class DatabaseManager:
         self.excludesubstrings: List[str] = excludes
 
         # Load expiration settings
-        expirations = get_config("generic", "expiration", default={})
-        if not isinstance(expirations, dict) or not all(isinstance(k, str) and isinstance(v, int) for k, v in expirations.items()):
+        expirations_cfg = get_config("generic", "expiration", default={})
+        if not isinstance(expirations_cfg, dict) or not all(isinstance(k, str) and isinstance(v, int) for k, v in expirations_cfg.items()):
             raise InvalidConfigError("expiration in generic config must be a dictionary of string keys and integer values")
-        self.expirations: Dict[str, int] = expirations
+
+        # Normalize expiration keys so configs can use either RR names (e.g., "A")
+        # or numeric codes as strings (e.g., "1"). Internally we store
+        # everything keyed by the numeric string from RRType.
+        normalized_expirations: Dict[str, int] = {}
+        for key, value in expirations_cfg.items():
+            upper_key = key.upper()
+            if upper_key in RRType.__members__:
+                code = str(RRType[upper_key].value)
+                normalized_expirations[code] = value
+            else:
+                normalized_expirations[upper_key] = value
+
+        self.expirations: Dict[str, int] = normalized_expirations
 
         self.notification_manager = NotificationManager()
 
@@ -65,8 +79,16 @@ class DatabaseManager:
             logger.debug({"event": "record_excluded", "rrname": record.rrname})
             return
 
-        rrtype_str = str(record.rrtype).upper()
-        expiration = self.expirations.get(rrtype_str)
+        rrtype_raw = str(record.rrtype).upper()
+
+        # Allow PDNSRecord.rrtype to be either a name (e.g., "A") or
+        # a numeric code. Normalize to the numeric string used internally.
+        if rrtype_raw in RRType.__members__:
+            rrtype_key = str(RRType[rrtype_raw].value)
+        else:
+            rrtype_key = rrtype_raw
+
+        expiration = self.expirations.get(rrtype_key)
         await self.database.store_record(record, expiration=expiration)
         dns_record = DNSRecord.from_pdns(record)
         await self.notification_manager.check_record(dns_record)

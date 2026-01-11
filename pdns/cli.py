@@ -132,8 +132,8 @@ async def main():
 
         # Load additional configurations
         dnstype = load_dns_types()
-        excludesubstrings = get_config("exclude", {}).get("substrings", [])
-        expirations = get_config("expiration", {})
+        excludesubstrings = get_config("generic", "excludesubstrings", default=[])
+        expirations = get_config("generic", "expiration", default={})
 
         # Get DatabaseManager instance
         db_gen = get_database()

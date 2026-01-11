@@ -14,7 +14,33 @@ import importlib
 import inspect
 
 # Initialize limiter and token storage
-limiter = Limiter(key_func=get_remote_address)
+rate_limit_cfg = get_config("generic", "rate_limit", default={}) or {}
+default_limits = []
+
+# Minimal, config-driven rate limiting: if any endpoint has a rate_limit entry,
+# derive a simple default limit of "<max_requests>/<window>s" using the
+# highest requests/window pair. This keeps runtime behavior aligned with
+# generic.json without requiring per-endpoint decorators.
+if isinstance(rate_limit_cfg, dict) and rate_limit_cfg:
+    try:
+        # rate_limit entries are of the form {"endpoint": {"requests": int, "window": int}}
+        limits = []
+        for _, v in rate_limit_cfg.items():
+            if isinstance(v, dict) and "requests" in v and "window" in v:
+                requests = int(v["requests"])
+                window = int(v["window"])
+                if requests > 0 and window > 0:
+                    limits.append((requests, window))
+        if limits:
+            max_requests, window = max(limits, key=lambda x: x[0])
+            default_limits = [f"{max_requests}/{window} second"]
+    except Exception as e:
+        logger.error({
+            "event": "rate_limit_config_error",
+            "error": str(e),
+        })
+
+limiter = Limiter(key_func=get_remote_address, default_limits=default_limits or None)
 VALID_TOKENS = []
 
 # FastAPI app setup
@@ -36,17 +62,34 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(429, _rate_limit_exceeded_handler)
 
-# Load bearer tokens at startup
-def load_bearer_tokens():
-    """Load bearer tokens from config/tokens.json."""
+def load_bearer_tokens() -> None:
+    """Load bearer tokens from generic auth configuration.
+
+    Supports both list-of-objects and simple dict styles to ease migration
+    from earlier configs.
+    """
     global VALID_TOKENS
     try:
-        tokens_data = get_config("tokens", default={})
-        VALID_TOKENS = [t["value"] for t in tokens_data.get("tokens", [])]
-        logger.info({"event": "tokens_loaded", "count": len(VALID_TOKENS)})
+        auth_cfg = get_config("generic", "auth", default={}) or {}
     except InvalidConfigError as e:
         logger.error({"event": "tokens_load_failed", "error": str(e)})
         VALID_TOKENS = []
+        return
+
+    tokens_cfg = auth_cfg.get("tokens", [])
+    tokens: list[str] = []
+
+    # Support dict style: {"user": "token", ...}
+    if isinstance(tokens_cfg, dict):
+        tokens = [str(v) for v in tokens_cfg.values()]
+    # Support list style: [{"value": "token", "name": "user"}, ...]
+    elif isinstance(tokens_cfg, list):
+        for item in tokens_cfg:
+            if isinstance(item, dict) and "value" in item:
+                tokens.append(str(item["value"]))
+
+    VALID_TOKENS = tokens
+    logger.info({"event": "tokens_loaded", "count": len(VALID_TOKENS)})
 
 # Application lifespan
 @asynccontextmanager
@@ -87,17 +130,21 @@ DEFAULT_CONFIG = {
         "query": {"auth": "none"},
         "fquery": {"auth": "none"},
         "stream": {"auth": "none"},
-    }
+    },
 }
-
-auth_config = get_config("auth", default=DEFAULT_CONFIG)
 
 def get_auth_dependency():
     """Create dynamic authentication dependency based on auth config."""
+
     async def dynamic_auth(request: Request):
+        try:
+            auth_cfg = get_config("generic", "auth", default=DEFAULT_CONFIG) or DEFAULT_CONFIG
+        except InvalidConfigError:
+            auth_cfg = DEFAULT_CONFIG
+
         path_parts = request.url.path.strip("/").split("/")
         endpoint = path_parts[0] if path_parts else ""
-        mode = auth_config.get("endpoints", {}).get(endpoint, {"auth": "none"})["auth"]
+        mode = auth_cfg.get("endpoints", {}).get(endpoint, {"auth": "none"})["auth"]
         if mode == "none":
             return None
         elif mode == "bearer":
@@ -136,7 +183,7 @@ async def get_database() -> DatabaseManager:
 
 async def start_ingestors(db: DatabaseManager):
     """Start zero or more ingestors based on configuration."""
-    ingestors_config = get_config("ingestors", default={})
+    ingestors_config = get_config("generic", "ingestors", default={})
     if not ingestors_config:
         logger.info({"event": "ingestors_skipped", "message": "No ingestors configured"})
         return

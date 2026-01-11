@@ -158,9 +158,9 @@ Choose and install a database backend (Redis or KV Rocks).
        "endpoints": {
          "query": {"auth": "bearer"}
        },
-       "tokens": {
-         "user": "xyz123"
-       }
+       "tokens": [
+         {"name": "user", "value": "xyz123"}
+       ]
      }
    }
    ```
@@ -293,7 +293,7 @@ For production, run the server and ingestors as `systemd` services.
   User=<user>
   WorkingDirectory=/path/to/analyzer-d4-passivedns
   Environment="PDNS_HOME=/path/to/analyzer-d4-passivedns"
-  ExecStart=/path/to/poetry run python bin/pdns-import-cof.py --websocket ws://crh.circl.lu:8888
+  ExecStart=/path/to/poetry run pdns ingest --websocket ws://crh.circl.lu:8888
   Restart=always
   
   [Install]
@@ -353,15 +353,21 @@ See [Troubleshooting](./troubleshooting.md) for more details.
 - **Secure Configurations**:
   ```bash
   chmod 600 config/generic.json
+  chmod 600 config/logging.json
   ```
 - **Backups**: Back up `config/` and database snapshots.
-- **Logging**: Configure `logging.json` for production:
-  ```json
-  {
-    "level": "INFO",
-    "file": "pdns.log"
-  }
-  ```
+- **Logging**:
+  1. Copy the sample file:
+     ```bash
+     cp config/logging.json.sample config/logging.json
+     ```
+  2. Adjust for production, for example:
+     ```json
+     {
+       "level": "INFO",
+       "file": "pdns.log"
+     }
+     ```
 - **Updates**: Regularly update dependencies:
   ```bash
   poetry update

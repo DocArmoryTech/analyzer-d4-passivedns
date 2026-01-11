@@ -97,7 +97,7 @@ This guide provides troubleshooting steps for common issues in the `analyzer-d4-
      ```
   4. **Restart Ingestor**:
      ```bash
-     poetry run python bin/pdns-import-cof.py --websocket ws://crh.circl.lu:8888
+    poetry run pdns ingest --websocket ws://crh.circl.lu:8888
      ```
 
 ### 3. Notifiers Not Sending Alerts
@@ -170,9 +170,9 @@ This guide provides troubleshooting steps for common issues in the `analyzer-d4-
            "endpoints": {
              "query": {"auth": "bearer"}
            },
-           "tokens": {
-             "user": "xyz123"
-           }
+           "tokens": [
+             {"name": "user", "value": "xyz123"}
+           ]
          }
        }
        ```

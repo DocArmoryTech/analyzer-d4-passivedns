@@ -1,132 +1,109 @@
 # analyzer-d4-passivedns
 
-analyzer-d4-passivedns is an advanced analyzer for D4 network sensors, featuring a fully compliant Passive DNS server. It processes data from D4 sensors in [passivedns](https://github.com/gamelinux/passivedns) CSV format and independently via [COF websocket](https://datatracker.ietf.org/doc/html/draft-dulaunoy-dnsop-passive-dns-cof) streams. The package includes a Passive DNS server that adheres to the [Passive DNS - Common Output Format (draft-dulaunoy-dnsop-passive-dns-cof)](https://tools.ietf.org/html/draft-dulaunoy-dnsop-passive-dns-cof), enabling efficient querying of DNS records.
+analyzer-d4-passivedns is a Passive DNS analyzer and server for D4 network sensors. It ingests DNS records from multiple sources (D4 queues, COF streams, log files, Zeek logs, DNSTap, PCAP) and exposes a Passive DNS API compliant with the [Passive DNS – Common Output Format](https://tools.ietf.org/html/draft-dulaunoy-dnsop-passive-dns-cof).
 
-## Background and Origins
-
-The `analyzer-d4-passivedns` project originated from the need for a robust Passive DNS solution tailored for D4 network sensors. It builds upon the original [analyzer-d4-passivedns](https://github.com/D4-project/analyzer-d4-passivedns) by the D4 Project, drawing inspiration from tools like [passivedns](https://github.com/gamelinux/passivedns) and the COF standard. The project evolved to address scalability, performance, and modern API requirements, transitioning to FastAPI for its auto-generated OpenAPI spec and enhanced developer experience.
-
-## Utility
-
-This tool is invaluable for network security analysts, researchers, and administrators. It offers:
-- Real-time collection and storage of DNS data from D4 sensors and COF streams.
-- A queryable Passive DNS database for historical analysis.
-- Flexible configuration to filter and process specific DNS records.
-- Integration with modern notification systems for alerting on DNS events.
-
-## Origins and Influences
-
-The project is influenced by:
-- **D4 Project**: Providing the foundational framework for sensor integration.
-- **passivedns**: Inspiring the initial CSV-based data processing.
-- **COF Standard**: Driving the adoption of a standardized output format.
-- **FastAPI**: Enabling a modern, auto-documented API framework.
+The project is a modern reimplementation of the original [D4 analyzer-d4-passivedns](https://github.com/D4-project/analyzer-d4-passivedns), with a focus on clearer configuration, modular components, and a FastAPI-based HTTP API.
 
 ## Features
 
-- **[Input Streams]**:
-  - **D4 Analyzer**: Connects to one or more [D4 servers](https://github.com/D4-project/d4-core) to stream DNS records.
-  - **COF Websocket**: Processes NDJSON COF format from websockets or files.
-- **[Output API]**: A fully compliant Passive DNS ReST server with auto-generated OpenAPI documentation via FastAPI.
-- **Flexible Configuration**: Configurable via JSON to collect specific DNS records.
-- **Modular Design**: Supports custom ingestors and notifiers for extensibility.
-- **High Performance**: Optimized with Redis or KV Rocks backends.
-- **Authentication and Rate Limiting**: Secure API access with configurable controls.
-
-## Comparative Benefits
-
-Compared to the original [analyzer-d4-passivedns](https://github.com/D4-project/analyzer-d4-passivedns), this version offers:
-- **Modern API**: FastAPI replaces the Tornado-based server, providing an interactive OpenAPI spec.
-- **Enhanced Performance**: Improved database interactions with Redis and KV Rocks.
-- **Modularity**: Dynamic loading of ingestors and notifiers via `generic.json`.
-- **Documentation**: Comprehensive guides with Mermaid diagrams for developers.
-- **Scalability**: Better handling of large datasets with streaming and pagination.
-
-## Architecture
-
-The project leverages Python 3.8+ and FastAPI, with a modular architecture:
-- **Database Layer**: Redis or KV Rocks with dynamic backend selection.
-- **Ingestors**: Modular components for data ingestion (e.g., D4, COF).
-- **Notifiers**: Configurable alert system (e.g., email, webhooks).
-- **API Layer**: FastAPI-driven endpoints with OpenAPI documentation.
-- **Configuration**: Centralized JSON-based settings.
+- Input from D4 Redis queues, COF WebSocket streams, PassiveDNS text logs, NDJSON/JSON files, Zeek DNS logs, DNSTap, and PCAP.
+- FastAPI HTTP API (`/info`, `/query`, `/fquery`, `/stream`) with OpenAPI documentation at `/docs`.
+- Redis or KV Rocks backend, selected via configuration.
+- Pluggable ingestors and notifiers, configured declaratively.
+- JSON-based configuration and explicit behaviour (no hidden global state).
 
 ## Requirements
 
-- **Python**: 3.8 or higher.
-- **Database**: Redis (>5.0) or [KV Rocks](https://github.com/apache/incubator-kvrocks).
-- **Dependencies**: Managed via Poetry (replacing virtualenv setup).
+- Python 3.10 or higher.
+- Redis (>5.0) or [KV Rocks](https://github.com/apache/incubator-kvrocks).
+- [Poetry](https://python-poetry.org/) for dependency management.
 
-## Install
+## Installation
 
-### Redis
-
-```bash
-./bin/install_server_redis.sh
-```
-
-### KV Rocks
+Clone the repository and install Python dependencies:
 
 ```bash
-./bin/install_server_kvrocks.sh
-```
-
-Install dependencies:
-```bash
+git clone https://github.com/D4-project/analyzer-d4-passivedns.git
+cd analyzer-d4-passivedns
 poetry install
 ```
 
-## Running
+Set the project home and prepare the main configuration:
 
-### Start the Database
-
-For Redis:
 ```bash
+export PDNS_HOME=$(pwd)
+cp config/generic.json.sample config/generic.json
+```
+
+Install and start a database backend (Redis example):
+
+```bash
+./bin/install_server_redis.sh
 ./redis/src/redis-server ./etc/redis.conf
 ```
 
-For KV Rocks:
-```bash
-./kvrocks/src/kvrocks -c ./etc/kvrocks.conf
-```
+See [docs/admin/installation.md](docs/admin/installation.md) for KV Rocks and production deployment details.
 
-### Start the Passive DNS Server
+## Running the API server
+
+Start the FastAPI server with uvicorn:
 
 ```bash
 poetry run uvicorn pdns.main:app --host 0.0.0.0 --port 8000
 ```
 
-## Feeding the Passive DNS Server
+The OpenAPI documentation is available at:
 
-### Via COF Websocket Stream
+- `http://localhost:8000/docs`
+
+Basic query example:
 
 ```bash
-poetry run python3 bin/pdns-import-cof.py --websocket ws://crh.circl.lu:8888
+curl -s "http://localhost:8000/query/example.com"
 ```
 
-### Via D4 Analyzer
+Authentication, rate limiting, and other API settings are controlled via `config/generic.json` (see the documentation).
 
-Configure `etc/analyzer.conf`:
-```ini
-[global]
-my-uuid = 6072e072-bfaa-4395-9bb1-cdb3b470d715
-d4-server = 127.0.0.1:6380
-logging-level = INFO
-```
+## Ingestion
 
-Start the analyzer:
-```bash
-poetry run python3 bin/pdns-ingestion.py
-```
+DNS records can be ingested from different sources using ingestors. Ingestors are configured under the `ingestors` key in `config/generic.json` and implemented in [pdns/ingestors](pdns/ingestors).
 
-## Usage
+Typical sources include:
 
-Query the server:
-```bash
-curl -s http://127.0.0.1:8000/query/example.com
-```
+- PassiveDNS-formatted text files.
+- NDJSON and JSON arrays of COF records.
+- D4 Redis queues.
+- Zeek DNS JSON logs.
+- DNSTap framed data and PCAP files.
+- WebSocket streams of JSON DNS records.
 
-Explore the auto-generated API docs at `http://127.0.0.1:8000/docs`.
+For configuration examples and operational guidance, see [docs/admin/ingestors.md](docs/admin/ingestors.md).
+
+## Notifiers
+
+The notifier subsystem allows the server to emit alerts when records match configurable conditions. Notifiers are defined under the `notifiers` key in `config/generic.json` and implemented in [pdns/notifiers](pdns/notifiers).
+
+Supported backends include log, email, Matrix, Mattermost, Rocket.Chat, and generic webhooks. Each notifier:
+
+- Implements a shared `Notifier` base interface.
+- Uses Jinja2 templates for message rendering.
+- Applies one or more filters before delivery.
+
+Design and extension guidelines for notifiers and filters are documented in:
+
+- [docs/admin/notifiers.md](docs/admin/notifiers.md)
+- [docs/dev/adding-notifiers.md](docs/dev/adding-notifiers.md)
+- [docs/dev/contributing.md](docs/dev/contributing.md)
+
+## Documentation
+
+The repository includes a MkDocs documentation tree under [docs](docs), covering:
+
+- User guide (querying, examples, schemas).
+- Administrator guide (installation, configuration, ingestors, notifiers, scaling, troubleshooting).
+- Developer guide (codebase overview, API development, testing, extending ingestors and notifiers).
+
+Start at [docs/index.md](docs/index.md) for an overview.
 
 ## License
 

@@ -70,6 +70,61 @@ def validate_generic_config_file() -> bool:
             raise ValueError(f"Extra key '{key}' in {user_path} not present in {sample_path}")
     return True
 
+
+def validate_logging_config_file() -> bool:
+    """Validate logging.json for basic shape.
+
+    Accepts the simple shorthand schema used by load_logging_config
+    ("level", "file", "format").
+    """
+
+    log_path = CONFIG_DIR / "logging.json"
+    if not log_path.exists():
+        raise FileNotFoundError(f"Logging config not found: {log_path}")
+
+    with log_path.open() as f:
+        cfg = json.load(f)
+
+    if not isinstance(cfg, dict):
+        raise ValueError(f"logging.json must be a JSON object, got {type(cfg)}")
+
+    level = cfg.get("level")
+    if level is not None and not isinstance(level, str):
+        raise ValueError("logging.json 'level' must be a string if present")
+
+    if "file" in cfg and not isinstance(cfg["file"], str):
+        raise ValueError("logging.json 'file' must be a string if present")
+
+    if "format" in cfg and not isinstance(cfg["format"], str):
+        raise ValueError("logging.json 'format' must be a string if present")
+
+    return True
+
+
+def validate_rrtypes_config_file() -> bool:
+    """Validate rrtypes.json for basic structure.
+
+    Ensures it is a list of objects with at least 'type' and 'value'.
+    """
+
+    rrtypes_path = CONFIG_DIR / "rrtypes.json"
+    if not rrtypes_path.exists():
+        raise FileNotFoundError(f"RR types config not found: {rrtypes_path}")
+
+    with rrtypes_path.open() as f:
+        rr_cfg = json.load(f)
+
+    if not isinstance(rr_cfg, list):
+        raise ValueError("rrtypes.json must be a list of objects")
+
+    for entry in rr_cfg:
+        if not isinstance(entry, dict):
+            raise ValueError("Each rrtypes.json entry must be an object")
+        if "type" not in entry or "value" not in entry:
+            raise ValueError("Each rrtypes.json entry must contain 'type' and 'value'")
+
+    return True
+
 def update_user_config() -> bool:
     """Update generic.json with missing entries from generic.json.sample."""
     sample_path = CONFIG_DIR / "generic.json.sample"
@@ -125,11 +180,29 @@ def main():
         sys.exit(1)
 
     if args.check:
+        ok = True
         try:
             if validate_generic_config_file():
                 logger.info(f"The entries in {CONFIG_DIR / 'generic.json'} are valid.")
         except Exception as e:
-            logger.error(f"Validation failed: {e}")
+            logger.error(f"Validation of generic.json failed: {e}")
+            ok = False
+
+        try:
+            if validate_logging_config_file():
+                logger.info(f"The entries in {CONFIG_DIR / 'logging.json'} are valid.")
+        except Exception as e:
+            logger.error(f"Validation of logging.json failed: {e}")
+            ok = False
+
+        try:
+            if validate_rrtypes_config_file():
+                logger.info(f"The entries in {CONFIG_DIR / 'rrtypes.json'} are valid.")
+        except Exception as e:
+            logger.error(f"Validation of rrtypes.json failed: {e}")
+            ok = False
+
+        if not ok:
             sys.exit(1)
 
     if args.update:

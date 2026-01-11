@@ -18,7 +18,7 @@ class NotificationManager:
 
     def _load_notifiers(self) -> None:
         """Load notifiers from the generic config dynamically."""
-        notifiers_config = await get_config("notifiers", quiet=True) or []
+        notifiers_config = get_config("generic", "notifiers", default=[]) or []
         if not isinstance(notifiers_config, list):
             logger.error("Notifiers config must be a list; no notifiers loaded")
             return

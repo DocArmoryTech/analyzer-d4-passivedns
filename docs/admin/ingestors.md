@@ -223,10 +223,10 @@ python tools/validate_config_files.py --check
 
 ## Running Ingestors
 
-Ingestors are typically run as separate processes using scripts in `bin/`. For example, to run the `pdns` ingestor:
+Ingestors are typically run as separate processes driven by the `pdns` CLI. For example, to run the PassiveDNS-text ingestor:
 
 ```bash
-poetry run python bin/pdns-import-pdns.py --file_path /path/to/pdns.log
+poetry run pdns ingest --pdns /path/to/pdns.log
 ```
 
 For production, configure ingestors as systemd services:
