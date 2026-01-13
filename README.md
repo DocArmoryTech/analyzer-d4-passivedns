@@ -88,6 +88,13 @@ Logs are written to stdout/stderr of the `pdns-api` container by default and can
 docker compose logs -f pdns-api
 ```
 
+To build and push the image manually (outside docker-compose):
+
+```bash
+docker build -t d4/pdns-api .
+docker push d4/pdns-api   # optional
+```
+
 ## Ingestion
 
 DNS records can be ingested from different sources using ingestors. Ingestors are configured under the `ingestors` key in `config/generic.json` and implemented in [pdns/ingestors](pdns/ingestors).

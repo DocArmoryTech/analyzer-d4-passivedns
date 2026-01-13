@@ -52,7 +52,9 @@ The FastAPI server hosts the API endpoints (`/info`, `/query`, `/fquery`, `/stre
     docker compose logs -f pdns-api
     ```
 
-  The container image sets `PDNS_HOME` internally, and configuration is mounted from the host `config/` directory by default as defined in `docker-compose.yml`.
+  The container image runs as a non-root `pdns` user, sets `PDNS_HOME` internally, and mounts configuration from the host `config/` directory by default as defined in `docker-compose.yml`.
+
+  To use Kvrocks instead of Redis, enable the commented `kvrocks` service in `docker-compose.yml` and base your `config/generic.json` on `config/generic.kvrocks.json.sample` (host `kvrocks`, port `6666`).
 2. **Verify**:
 
    - Check the API:

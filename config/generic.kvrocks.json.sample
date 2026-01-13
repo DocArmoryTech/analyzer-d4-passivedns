@@ -1,0 +1,83 @@
+{
+  "_notes": {
+    "database": "Database backend configuration for Kvrocks. Kvrocks speaks the Redis protocol, so 'type' remains 'redis'; only host/port differ.",
+    "tokens": "Bearer tokens live in auth.tokens and should be configured there.",
+    "auth": "Authentication modes per endpoint. 'none' = no auth, 'bearer' = token required, 'openid' = not implemented.",
+    "excludesubstrings": "List of domain substrings to exclude from ingestion/import (e.g., ['spamhaus.org']).",
+    "expiration": "Expiration times (in seconds) for DNS records by RR type (e.g., 'A', 'AAAA'). Numeric codes are also accepted.",
+    "rrset_supported": "List of supported RR types (as strings, typically RR names like 'A', 'AAAA').",
+    "ingestors": "Dict of ingestors keyed by name. Each entry includes 'type' (e.g., 'pdns', 'ndjson', 'd4redis') and a 'config' object.",
+    "notifiers": "Array of notifiers. Each entry includes 'type' (e.g., 'log'), 'name', 'filter', and optional config.",
+    "rate_limit": "Per-endpoint rate limiting configuration as objects with 'requests' and 'window' (seconds)."
+  },
+  "database": {
+    "type": "redis",
+    "config": {
+      "host": "kvrocks",
+      "port": 6666,
+      "db": 0
+    }
+  },
+  "auth": {
+    "endpoints": {
+      "info": {"auth": "none"},
+      "query": {"auth": "bearer"},
+      "fquery": {"auth": "bearer"},
+      "stream": {"auth": "none"}
+    },
+    "tokens": [
+      {"name": "admin_token", "value": "supersecretadmintoken123"},
+      {"name": "user_token", "value": "basicusertoken456"}
+    ]
+  },
+  "excludesubstrings": ["spamhaus.org", "asn.cymru.com"],
+  "expiration": {
+    "A": 86400,
+    "AAAA": 86400,
+    "CNAME": 86400
+  },
+  "rrset_supported": ["A", "AAAA", "CNAME"],
+  "ingestors": {
+    "pdns_ingestor": {
+      "type": "pdns",
+      "config": {
+        "file_path": "/path/to/pdns.log"
+      }
+    },
+    "ndjson_ingestor": {
+      "type": "ndjson",
+      "config": {
+        "file_path": "/path/to/dns.ndjson"
+      }
+    },
+    "redis_ingestor": {
+      "type": "d4redis",
+      "config": {
+        "redis_uri": "redis://kvrocks:6666/dns_queue"
+      }
+    }
+  },
+  "rate_limit": {
+    "query": {"requests": 100, "window": 60},
+    "fquery": {"requests": 50, "window": 60},
+    "stream": {"requests": 10, "window": 60}
+  },
+  "notifiers": [
+    {
+      "type": "email",
+      "config": {
+        "smtp_host": "localhost",
+        "smtp_port": 25,
+        "sender": "alerts@example.com",
+        "recipient": "admin@example.com"
+      },
+      "filter": {
+        "type": "composite",
+        "filters": [
+          {"type": "string", "condition": {"rrtype": "A"}, "case_sensitive": false}
+        ],
+        "operator": "and"
+      }
+    }
+  ]
+}
