@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Request, Response, Depends, Query, HTTPException
 from typing import Optional
+from slowapi.util import get_remote_address
 from ..main import limiter, get_database, optional_auth
-from ..default.helpers import logger, get_remote_address
+from ..default.helpers import logger
 from ..rrtypes import SupportedRRType
 from ..schemas import DNSRecord, MetadataResponse, TimeFormat, ResponseFormat
 from ..db.manager import DatabaseManager

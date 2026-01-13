@@ -1,6 +1,6 @@
 # pdns/notifiers/mattermost/notifier.py
 from ..webhook import WebhookNotifier
-from .filters.base import NotificationFilter
+from ..filters.base import NotificationFilter
 
 
 class MattermostNotifier(WebhookNotifier):

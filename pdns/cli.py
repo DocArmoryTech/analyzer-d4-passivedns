@@ -10,38 +10,53 @@
 import argparse
 import asyncio
 import sys
-from .default.helpers import logger, get_config, load_logging_config, load_dns_types
+from .default.helpers import logger, get_config, load_logging_config, load_dns_types, init_configs
 from .main import get_database, app  # Import app for serve command
-from .ingestors.websocket import WebSocketIngestor
-from .ingestors.json import JSONFileIngestor
-from .ingestors.ndjson import NDJSONFileIngestor
-from .ingestors.passivedns import PDNSIngestor
-from .ingestors.redis_queue import RedisQueueIngestor
-from .ingestors.zeek import ZeekIngestor
 from .db.manager import DatabaseManager
-from uvicorn import run as uvicorn_run
+import uvicorn
+
+
+INGESTORS_AVAILABLE = True
+try:
+    from .ingestors.stream.websocket import WebSocketIngestor
+    from .ingestors.file.json import JSONFileIngestor
+    from .ingestors.file.line.ndjson import NDJSONFileIngestor
+    from .ingestors.file.line.passivedns import PDNSIngestor
+    from .ingestors.stream.redis_queue import RedisQueueIngestor
+    from .ingestors.file.line.zeek import ZeekIngestor
+except ImportError as e:
+    logger.error({"event": "ingestor_import_error", "error": str(e)})
+
+    # In refactored layouts, ingestor modules may move or be disabled.
+    # Keep the CLI importable for the 'serve' command even if ingestion
+    # backends are not wired in this build.
+    INGESTORS_AVAILABLE = False
+    WebSocketIngestor = JSONFileIngestor = NDJSONFileIngestor = PDNSIngestor = RedisQueueIngestor = ZeekIngestor = None
 
 
 async def ingest_source(args: argparse.Namespace, db: DatabaseManager) -> None:
     """Handle ingestion based on provided source argument."""
+    if not INGESTORS_AVAILABLE:
+        raise RuntimeError("Ingestion backends are not available in this build")
+
     try:
         if args.ndjson_file:
-            ingestor = NDJSONFileIngestor(db, args.ndjson_file)
+            ingestor = NDJSONFileIngestor(db, {"file_path": args.ndjson_file})
             source = args.ndjson_file
         elif args.json_file:
-            ingestor = JSONFileIngestor(db, args.json_file)
+            ingestor = JSONFileIngestor(db, {"file_path": args.json_file})
             source = args.json_file
         elif args.websocket_url:
-            ingestor = WebSocketIngestor(db, args.websocket_url)
+            ingestor = WebSocketIngestor(db, {"ws_url": args.websocket_url})
             source = args.websocket_url
         elif args.pdns_file:
-            ingestor = PDNSIngestor(db, args.pdns_file)
+            ingestor = PDNSIngestor(db, {"file_path": args.pdns_file})
             source = args.pdns_file
         elif args.redis_queue:
-            ingestor = RedisQueueIngestor(db, args.redis_queue)
+            ingestor = RedisQueueIngestor(db, {"redis_uri": args.redis_queue})
             source = args.redis_queue
         elif args.zeek_file:
-            ingestor = ZeekIngestor(db, args.zeek_file)
+            ingestor = ZeekIngestor(db, {"file_path": args.zeek_file})
             source = args.zeek_file
         else:
             raise ValueError("No ingestion source specified")
@@ -57,7 +72,7 @@ async def ingest_source(args: argparse.Namespace, db: DatabaseManager) -> None:
         sys.exit(1)
 
 
-async def main():
+async def _async_main():
     parser = argparse.ArgumentParser(description="Passive DNS Server CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
@@ -97,6 +112,7 @@ async def main():
 
     # Load configurations
     load_logging_config()
+    await init_configs()
     logger.info(
         {
             "event": "cli_start",
@@ -106,7 +122,9 @@ async def main():
 
     if args.command == "serve":
         logger.info({"event": "cli_serve", "host": args.host, "port": args.port})
-        uvicorn_run(app, host=args.host, port=args.port)
+        config = uvicorn.Config(app, host=args.host, port=args.port, log_level="info")
+        server = uvicorn.Server(config)
+        await server.serve()
     elif args.command == "ingest":
         # Validate ingestion arguments
         sources = [
@@ -147,5 +165,15 @@ async def main():
         sys.exit(0)
 
 
+def main() -> None:
+    """Synchronous entry point for console_script.
+
+    Wrap the async implementation so that the Poetry-generated
+    ``pdns`` script can call this like a normal function.
+    """
+
+    asyncio.run(_async_main())
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

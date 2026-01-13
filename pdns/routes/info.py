@@ -1,7 +1,8 @@
 # pdns/routes/info.py
-from fastapi import APIRouter, Request, Depends
-from ..main import limiter, get_database
-from ..default.helpers import logger, get_remote_address
+from fastapi import APIRouter, Request, Depends, HTTPException
+from slowapi.util import get_remote_address
+from ..main import limiter, get_database, optional_auth
+from ..default.helpers import logger
 from ..schemas import InfoResponse
 from ..db.manager import DatabaseManager
 from .. import __version__

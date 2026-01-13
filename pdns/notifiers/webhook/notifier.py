@@ -1,7 +1,7 @@
 # pdns/notifiers/webhook.py
 from ..base import Notifier
-from ..default.helpers import logger
-from .filters.base import NotificationFilter
+from ...default.helpers import logger
+from ..filters.base import NotificationFilter
 import aiohttp
 
 

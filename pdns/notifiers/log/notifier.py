@@ -1,7 +1,7 @@
 # pdns/notifiers/log/notifier.py
 from ..base import Notifier
-from ..default.helpers import logger
-from .filters.base import NotificationFilter
+from ...default.helpers import logger
+from ..filters.base import NotificationFilter
 
 
 class LogNotifier(Notifier):

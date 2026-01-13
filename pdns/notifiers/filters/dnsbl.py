@@ -3,7 +3,7 @@ from .base import NotificationFilter
 from pypdns import PDNSRecord
 import dns.asyncresolver
 from functools import lru_cache
-from ..default.helpers import logger
+from ...default.helpers import logger
 
 
 class DNSBLFilter(NotificationFilter):

@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Request, Response, Depends, Query, HTTPException
 from typing import Optional
+from slowapi.util import get_remote_address
 from ..main import limiter, get_database, optional_auth
-from ..queries import get_record, get_associated_records
-from ..default.helpers import logger, get_remote_address
-from ..rrtypes import rrset, RRType  # Updated import
+from ..default.helpers import logger
+from ..rrtypes import RRType
 from ..schemas import DNSRecord, MetadataResponse, TimeFormat, ResponseFormat
 from ..db.manager import DatabaseManager
 import iptools
@@ -48,24 +48,16 @@ async def full_query(
 
     if iptools.ipv4.validate_ip(q) or iptools.ipv6.validate_ip(q):
         associated = await db.get_associated_records(q)
-        for x in associated:
-            records, nc, tc = await db.get_record(x, cursor, limit, rrtype_value)
-            result.extend(records)
-            total += tc
-            if (cursor is not None or total > limit) and nc:
-                next_cursor = nc
-                break
     else:
-        associated = await get_associated_records(q)
-        for x in associated:
-            records, nc, tc = await db.get_record(
-                x.strip(), cursor, limit, rrtype_value
-            )
-            result.extend(records)
-            total += tc
-            if (cursor is not None or total > limit) and nc:
-                next_cursor = nc
-                break
+        associated = await db.get_associated_records(q)
+
+    for x in associated or []:
+        records, nc, tc = await db.get_record(x.strip(), cursor, limit, rrtype_value)
+        result.extend(records)
+        total += tc
+        if (cursor is not None or total > limit) and nc:
+            next_cursor = nc
+            break
 
     headers = {"X-Total-Count": str(total)}
     if total > limit:

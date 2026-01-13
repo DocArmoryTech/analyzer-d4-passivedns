@@ -2,4 +2,11 @@
 from .dnsrecord import DNSRecord, TimeFormat, ResponseFormat
 from .api import Sensor, InfoResponse, MetadataResponse
 
-__all__ = ["TimeFormat", "ResponseFormat", "DNSRecord", "Sensor", "InfoResponse", "MetadataResponse"]
+__all__ = [
+    "TimeFormat",
+    "ResponseFormat",
+    "DNSRecord",
+    "Sensor",
+    "InfoResponse",
+    "MetadataResponse",
+]

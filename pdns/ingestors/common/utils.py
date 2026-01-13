@@ -1,5 +1,5 @@
 from pypdns import PDNSRecord
-from ..default.exceptions import DNSParseError
+from ...default.exceptions import DNSParseError
 
 def parse_line(line: str) -> PDNSRecord | None:
     """Parse a passivedns-formatted line into a PDNSRecord."""

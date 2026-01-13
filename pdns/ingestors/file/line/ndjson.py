@@ -1,5 +1,5 @@
 import json
-from .base import LineIngestor
+from ...base import LineIngestor
 from pypdns import PDNSRecord
 
 

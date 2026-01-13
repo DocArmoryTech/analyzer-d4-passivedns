@@ -2,7 +2,7 @@
 from ..base import Notifier
 from ...default.helpers import logger
 import aiohttp
-from .filters.base import NotificationFilter
+from ..filters.base import NotificationFilter
 
 class MatrixNotifier(Notifier):
     def __init__(

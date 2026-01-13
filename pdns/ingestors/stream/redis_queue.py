@@ -1,12 +1,12 @@
 import asyncio
 import aioredis
 from typing import Optional
-from ..default.helpers import logger
-from ..default.exceptions import DNSParseError
-from ..db.manager import DatabaseManager
+from ...default.helpers import logger
+from ...default.exceptions import DNSParseError
+from ...db.manager import DatabaseManager
 from pypdns import PDNSRecord
-from .base import StreamIngestor
-from .utils import parse_line
+from ..base import StreamIngestor
+from ..common.utils import parse_line
 
 
 class RedisQueueIngestor(StreamIngestor):

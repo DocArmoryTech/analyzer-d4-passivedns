@@ -1,9 +1,8 @@
+from typing import List, Optional
 
 from pydantic import BaseModel
-from typing import List, Optional, Union
-from pypdns import PDNSRecord
-import json
-from datetime import datetime
+
+from .dnsrecord import DNSRecord
 
 
 class Sensor(BaseModel):
@@ -14,7 +13,7 @@ class Sensor(BaseModel):
 class InfoResponse(BaseModel):
     version: str
     software: str
-    stats: int
+    stats: dict
     sensors: List[Sensor]
 
 

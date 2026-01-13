@@ -1,9 +1,20 @@
 from typing import List
 from google.protobuf.message import DecodeError
-from dnstap_pb2 import Dnstap
+try:
+    from dnstap_pb import dnstap_pb2 as DnstapPb2
+    Dnstap = DnstapPb2.Dnstap
+except ImportError:
+    try:
+        import dnstap_pb2
+        Dnstap = dnstap_pb2.Dnstap
+    except ImportError:
+        # Re-raise the original error if neither works, or helpful message
+        raise ImportError("Could not import Dnstap. Please ensure 'dnstap-pb' is installed.")
+
 from pypdns import PDNSRecord
 from ...default.helpers import logger
-import dnspython.dns.message
+import dns.message
+import dns.exception
 
 async def parse_dnstap_message(dnstap_data: bytes) -> List[PDNSRecord]:
     """Parse a DNSTap message into a list of PDNSRecord objects."""

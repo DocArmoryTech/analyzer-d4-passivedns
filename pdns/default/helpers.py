@@ -83,7 +83,15 @@ async def init_configs(path_to_config_files: str | Path | None = None) -> None:
             except json.JSONDecodeError as e:
                 raise InvalidConfigError(f"Invalid JSON in {entry}: {e}")
 
-@lru_cache(64)
+
+async def load_configs(path_to_config_files: str | Path | None = None) -> None:
+    """Backward-compatible alias for init_configs.
+
+    Legacy code may still import and await load_configs(); keep it as a
+    thin wrapper around init_configs so those call sites continue to work.
+    """
+    await init_configs(path_to_config_files)
+
 def get_config(config_type: str, entry: str | None = None, default: Any = None) -> Any:
     """
     Get a config entry from the specified config type.
@@ -133,7 +141,11 @@ def load_logging_config() -> None:
 
     # Determine logging config path, allowing tests to override via LOGGING_CONFIG_FILE.
     try:
-        path = Path(LOGGING_CONFIG_FILE) if LOGGING_CONFIG_FILE else get_homedir() / "config" / "logging.json"
+        env_path = os.environ.get("LOGGING_CONFIG_FILE")
+        if env_path:
+            path = Path(env_path)
+        else:
+            path = Path(LOGGING_CONFIG_FILE) if LOGGING_CONFIG_FILE else get_homedir() / "config" / "logging.json"
     except MissingEnv as e:
         # If home cannot be resolved, just configure basic logging.
         logging.basicConfig(level=logging.INFO)
@@ -171,3 +183,15 @@ def load_logging_config() -> None:
         # On any error, fall back to a safe default.
         logging.basicConfig(level=logging.INFO)
         logger.error({"event": "logging_config_error", "path": str(path), "error": str(e)})
+
+
+def load_dns_types():
+    """Lazy helper to load DNS RR type definitions.
+
+    Importing inside the function avoids triggering rrtypes loading at
+    module import time. The current CLI only uses the return value for
+    side effects, so we simply return the imported module.
+    """
+    from .. import rrtypes as _rrtypes
+
+    return _rrtypes

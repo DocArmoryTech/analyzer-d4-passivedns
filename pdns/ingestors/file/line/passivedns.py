@@ -1,5 +1,5 @@
-from ...ingestors.base import LineIngestor
-from ...ingestors.common.utils import parse_line
+from ...base import LineIngestor
+from ...common.utils import parse_line
 from pypdns import PDNSRecord
 
 class PDNSIngestor(LineIngestor):

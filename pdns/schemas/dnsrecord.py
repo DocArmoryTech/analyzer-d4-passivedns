@@ -1,8 +1,10 @@
-from pydantic import BaseModel
-from typing import List, Optional
-from pypdns import PDNSRecord
-import json
+from enum import Enum
 from datetime import datetime
+import json
+from typing import List, Optional
+
+from pydantic import BaseModel
+from pypdns import PDNSRecord
 
 
 class TimeFormat(str, Enum):

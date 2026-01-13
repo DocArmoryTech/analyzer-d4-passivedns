@@ -1,10 +1,10 @@
 import asyncio
 import json
 import aiofiles
-from ..default.helpers import logger
-from ..db.manager import DatabaseManager
+from ...default.helpers import logger
+from ...db.manager import DatabaseManager
 from pypdns import PDNSRecord
-from .base import Ingestor
+from ..base import Ingestor
 
 
 class JSONFileIngestor(Ingestor):

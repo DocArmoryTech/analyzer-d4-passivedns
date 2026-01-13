@@ -1,10 +1,10 @@
 import asyncio
 import websockets
 import json
-from ..default.helpers import logger
-from ..db.manager import DatabaseManager
+from ...default.helpers import logger
+from ...db.manager import DatabaseManager
 from pypdns import PDNSRecord
-from .base import StreamIngestor
+from ..base import StreamIngestor
 
 
 class WebSocketIngestor(StreamIngestor):
@@ -16,7 +16,7 @@ class WebSocketIngestor(StreamIngestor):
     type = "websocket"  # Identifier for this ingestor type
 
     def __init__(self, db_manager: DatabaseManager, config: dict) -> None:
-        super().__init__(db_manager)
+        super().__init__(db_manager, config)
         self.ws_url: str = config.get("ws_url", "")
         if not self.ws_url:
             raise ValueError("Missing required config parameter: ws_url")

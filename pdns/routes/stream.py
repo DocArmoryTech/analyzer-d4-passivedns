@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Request, Depends, Query, HTTPException
 from fastapi.responses import StreamingResponse
 from typing import Optional
+from slowapi.util import get_remote_address
 from ..main import limiter, get_database, optional_auth
-from ..queries import get_associated_records, stream_records
-from ..default.helpers import logger, get_remote_address
-from ..rrtypes import rrset, RRType  # Updated import
+from ..default.helpers import logger
+from ..rrtypes import RRType
 from ..schemas import DNSRecord, TimeFormat
-from ..db.base import Database
+from ..db.manager import DatabaseManager
 import iptools
 import json
 

@@ -8,13 +8,15 @@ from slowapi.util import get_remote_address
 from .default.helpers import logger, get_config, init_configs
 from .default.exceptions import DBConnectionError, InvalidConfigError
 from .db.manager import DatabaseManager
-from .ingestors import DaemonIngestor
-from .routes import info, query, fquery, stream
-import importlib
-import inspect
 
 # Initialize limiter and token storage
-rate_limit_cfg = get_config("generic", "rate_limit", default={}) or {}
+try:
+    rate_limit_cfg = get_config("generic", "rate_limit", default={}) or {}
+except InvalidConfigError:
+    # If configs are not yet initialized at import time, fall back to no
+    # rate limiting. Limits will still be applied on next process start
+    # once configs are available.
+    rate_limit_cfg = {}
 default_limits = []
 
 # Minimal, config-driven rate limiting: if any endpoint has a rate_limit entry,
@@ -40,7 +42,7 @@ if isinstance(rate_limit_cfg, dict) and rate_limit_cfg:
             "error": str(e),
         })
 
-limiter = Limiter(key_func=get_remote_address, default_limits=default_limits or None)
+limiter = Limiter(key_func=get_remote_address, default_limits=default_limits or [])
 VALID_TOKENS = []
 
 # FastAPI app setup
@@ -91,11 +93,15 @@ def load_bearer_tokens() -> None:
     VALID_TOKENS = tokens
     logger.info({"event": "tokens_loaded", "count": len(VALID_TOKENS)})
 
-# Application lifespan
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Manage application startup and shutdown."""
-    # Load configs and tokens at startup
+@app.on_event("startup")
+async def on_startup() -> None:
+    """Application startup hook.
+
+    Initialise configuration and authentication tokens. Database
+    connections are managed per-request via the get_database
+    dependency, and daemon ingestors are disabled in this build.
+    """
+
     try:
         await init_configs()
         load_bearer_tokens()
@@ -104,23 +110,12 @@ async def lifespan(app: FastAPI):
         logger.error({"event": "config_load_failed", "error": str(e)})
         raise
 
-    # Initialize DatabaseManager for ingestors
-    db = DatabaseManager()
-    try:
-        await db.initialize()
-        await start_ingestors(db)
-        logger.info({"event": "ingestors_initialized"})
-    except DBConnectionError as e:
-        logger.error({"event": "db_init_failed", "error": str(e)})
-        raise
 
-    yield
+@app.on_event("shutdown")
+async def on_shutdown() -> None:
+    """Application shutdown hook."""
 
-    # Cleanup
-    await db.shutdown()
     logger.info({"event": "shutdown", "message": "Application shutting down"})
-
-app.lifespan = lifespan
 
 # Authentication setup
 security_bearer = HTTPBearer(auto_error=False)
@@ -182,57 +177,34 @@ async def get_database() -> DatabaseManager:
         logger.info({"event": "database_shutdown"})
 
 async def start_ingestors(db: DatabaseManager):
-    """Start zero or more ingestors based on configuration."""
+    """Start zero or more ingestors based on configuration.
+
+    In this Docker-focused refactor, automatic daemon ingestors are
+    temporarily disabled. The API will still function, but any
+    background ingestion must be run via dedicated CLI tools.
+    """
+
     ingestors_config = get_config("generic", "ingestors", default={})
     if not ingestors_config:
         logger.info({"event": "ingestors_skipped", "message": "No ingestors configured"})
         return
 
-    ingestor_module = importlib.import_module(".ingestors", package="pdns")
-    ingestor_classes = {
-        cls.type: cls
-        for name, cls in inspect.getmembers(ingestor_module, inspect.isclass)
-        if hasattr(cls, "type")
-        and issubclass(cls, DaemonIngestor)
-        and cls != DaemonIngestor
-    }
-
-    for ingestor_name, config in ingestors_config.items():
-        try:
-            ingestor_type = config.get("type")
-            if not ingestor_type:
-                raise ValueError("Missing 'type' field in ingestor config")
-
-            ingestor_class = ingestor_classes.get(ingestor_type)
-            if not ingestor_class:
-                raise ValueError(f"Unknown ingestor type: {ingestor_type}")
-
-            ingestor_config = config.get("config", {})
-            ingestor = ingestor_class(db, **ingestor_config)
-            asyncio.create_task(ingestor.ingest())
-            logger.info(
-                {
-                    "event": "ingestor_started",
-                    "name": ingestor_name,
-                    "type": ingestor_type,
-                    "config": ingestor_config,
-                }
-            )
-        except Exception as e:
-            logger.error(
-                {
-                    "event": "ingestor_start_failed",
-                    "name": ingestor_name,
-                    "error": str(e),
-                }
-            )
+    logger.info(
+        {
+            "event": "ingestors_disabled",
+            "message": "Daemon ingestors are not started automatically in this build",
+            "configured_ingestors": list(ingestors_config.keys()),
+        }
+    )
 
 # Root redirect
 @app.get("/", include_in_schema=False)
 async def root():
     return RedirectResponse(url="/docs")
 
-# Include routers
+# Import and include routers after app, limiter, and dependencies are defined
+from .routes import info, query, fquery, stream  # noqa: E402
+
 app.include_router(info.router)
 app.include_router(query.router, dependencies=[Depends(optional_auth)])
 app.include_router(fquery.router, dependencies=[Depends(optional_auth)])
