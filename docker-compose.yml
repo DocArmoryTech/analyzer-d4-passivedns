@@ -1,0 +1,60 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    ports:
+      - "6379:6379"  # expose for local debugging; can be removed in prod
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  pdns-api:
+    build: .
+    depends_on:
+      - redis
+    environment:
+      - PDNS_HOME=/app
+      - LOGGING_CONFIG_FILE=config/logging.docker.json
+    volumes:
+      - ./config:/app/config:ro
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/info').status==200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  pdns-ingestor:
+    build: .
+    command: ["pdns", "ingest", "--redis-queue", "redis:6379:pdns_queue"]
+    depends_on:
+      - redis
+    environment:
+      - PDNS_HOME=/app
+      - LOGGING_CONFIG_FILE=config/logging.docker.json
+    volumes:
+      - ./config:/app/config:ro
+    restart: unless-stopped
+
+  # Optional Kvrocks service example (disabled by default).
+  # Uncomment and adjust the image name/tag as needed.
+  # kvrocks:
+  #   image: apache/kvrocks:latest
+  #   restart: unless-stopped
+  #   command: ["kvrocks", "-c", "/etc/kvrocks/kvrocks.conf"]
+  #   volumes:
+  #     - ./cache/kvrocks.conf:/etc/kvrocks/kvrocks.conf:ro
+  #   ports:
+  #     - "6666:6666"
+  #   healthcheck:
+  #     test: ["CMD", "kvrocks-cli", "-p", "6666", "PING"]
+  #     interval: 10s
+  #     timeout: 3s
+  #     retries: 5

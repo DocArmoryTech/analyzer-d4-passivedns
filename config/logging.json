@@ -1,0 +1,5 @@
+{
+  "level": "INFO",
+  "file": "pdns.log",
+  "format": "%(asctime)s %(levelname)s: %(message)s"
+}
