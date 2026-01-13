@@ -12,7 +12,7 @@ python = ">=3.10,<4.0"
 # Core dependencies for refactored project
 fastapi = "^0.115.0"  # Replaces tornado for API
 uvicorn = "^0.30.0"   # ASGI server for FastAPI
-aioredis = "^2.0.1"   # Async Redis client
+aioredis = ">=1.3.1,<2.0.0"   # Async Redis client (1.x API with create_redis_pool)
 pydantic = "^2.9.2"   # For schemas
 pypdns = "^1.0"       # Passive DNS record handling
 slowapi = "^0.1.9"    # Rate limiting for FastAPI
@@ -20,15 +20,20 @@ iptools = "^0.7.0"    # IP validation in routes
 aiofiles = "^23.2"    # Async file I/O for ingestors
 websockets = "^12.0"  # WebSocket ingestor
 python-dotenv = "^1.0"  # .env support in default/helpers
+jinja2 = "^3.1"        # Templating for notifiers
+dnspython = "^2.6"     # DNS lookups for DNSBL filters
+aiohttp = "^3.9"       # HTTP client for webhook and Matrix notifiers
+aiosmtplib = "^3.0"    # Async SMTP client for mail notifier
 
 # Optional dependencies from original project
 redis = { version = ">=5.2.1,<6.0.0", optional = true }  # For synchronous Redis (if still used)
-ndjson = { version = ">=0.3.1,<0.4.0", optional = true }  # For NDJSON parsing (if not replaced by built-in json)
+ndjson = ">=0.3.1,<0.4.0"  # For NDJSON parsing
 websocket-client = { version = ">=1.8.0,<2.0.0", optional = true }  # For sync WebSocket (if still used)
 tornado = { version = ">=6.4.2,<7.0.0", optional = true }  # For backwards compatibility
 scapy = "^2.6.1"
 protobuf = "^6.30.2"
 fstrm = "^0.6.1"
+dnstap-pb = "^0.11.3"
 
 [tool.poetry.extras]
 legacy = ["redis", "ndjson", "websocket-client", "tornado"]  # Group original deps as optional
