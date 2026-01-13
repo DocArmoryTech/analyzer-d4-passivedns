@@ -64,6 +64,30 @@ curl -s "http://localhost:8000/query/example.com"
 
 Authentication, rate limiting, and other API settings are controlled via `config/generic.json` (see the documentation).
 
+## Running with Docker
+
+For a quick local setup using Docker and docker-compose:
+
+1. Ensure Docker and docker-compose are installed.
+2. Prepare configuration (Docker-oriented sample):
+	 ```bash
+	 cp config/generic.docker.json.sample config/generic.json
+	 cp config/logging.json.sample config/logging.json
+	 ```
+3. Start the stack:
+	 ```bash
+	 docker compose up --build
+	 ```
+4. Access the API:
+	 - OpenAPI docs: `http://localhost:8000/docs`
+	 - Info endpoint: `http://localhost:8000/info`
+
+Logs are written to stdout/stderr of the `pdns-api` container by default and can be viewed with:
+
+```bash
+docker compose logs -f pdns-api
+```
+
 ## Ingestion
 
 DNS records can be ingested from different sources using ingestors. Ingestors are configured under the `ingestors` key in `config/generic.json` and implemented in [pdns/ingestors](pdns/ingestors).

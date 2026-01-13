@@ -22,6 +22,12 @@ Tests are located in the `tests/` directory and organized by module (e.g., `test
 
 2. **Set Up the Database**:
 
+   Ensure basic build tools are available first (for both Redis and Kvrocks):
+   ```bash
+   sudo apt-get update
+   sudo apt-get install -y build-essential git
+   ```
+
    - **Redis**:
      ```bash
      ./bin/install_server_redis.sh

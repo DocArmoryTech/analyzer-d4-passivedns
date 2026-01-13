@@ -37,6 +37,12 @@ Thank you for your interest in contributing to `analyzer-d4-passivedns`, a FastA
 
 4. **Set Up the Database**:
 
+   Ensure basic build tools are available first (for both Redis and Kvrocks):
+   ```bash
+   sudo apt-get update
+   sudo apt-get install -y build-essential git
+   ```
+
    - **Redis**:
      ```bash
      ./bin/install_server_redis.sh

@@ -30,6 +30,29 @@ The FastAPI server hosts the API endpoints (`/info`, `/query`, `/fquery`, `/stre
      poetry run uvicorn pdns.main:app --host 0.0.0.0 --port 8000 --reload
      ```
 
+  ## Running with Docker
+
+  For deployments that prefer containers, you can run the API and Redis backend using Docker and docker-compose from the project root:
+
+  1. Ensure `config/generic.json` and `config/logging.json` exist (for example, copy from the Docker sample) and set up configuration for containers:
+    ```bash
+    cp config/generic.docker.json.sample config/generic.json
+    cp config/logging.json.sample config/logging.json
+    ```
+  2. Build and start the stack:
+    ```bash
+    docker compose up --build -d
+    ```
+  3. Verify the API and Redis healthchecks:
+    ```bash
+    docker compose ps
+    ```
+  4. Check logs from the API container:
+    ```bash
+    docker compose logs -f pdns-api
+    ```
+
+  The container image sets `PDNS_HOME` internally, and configuration is mounted from the host `config/` directory by default as defined in `docker-compose.yml`.
 2. **Verify**:
 
    - Check the API:
